@@ -1,0 +1,13 @@
+
+> backend@1.0.0 dev
+> node --watch server.js
+
+Server running on port 5000
+MongoDB connected
+Restarting 'server.js'
+Server running on port 5000
+Failed running 'server.js'. Waiting for file changes before restarting...
+rver.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Server running on port 5000
+Failed running 'server.js'. Waiting for file changes before restarting...

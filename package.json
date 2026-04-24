@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "scripts": {
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:lint": "npm --prefix frontend run lint",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:start": "npm --prefix backend run start"
+  },
+  "dependencies": {
+    "axios": "^1.13.5",
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
+    "razorpay": "^2.9.6",
+    "react-router-dom": "^7.13.0"
+  }
+}
