@@ -5,10 +5,17 @@ function DestinationCard({ destination }) {
 
 const handleBooking = () => {
   localStorage.setItem("selectedDestinationId", destination.id);
-  navigate(`/booking/${destination.id}`);
+  navigate("/plan-trip", {
+  state: {
+    destination: destination.name,
+    budget: destination.price,
+    checkin: "2026-05-01",   // temporary or dynamic
+    checkout: "2026-05-03"
+  }
+});
 };
 
-  return (
+  return (  
     <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg 
     group transition duration-500 hover:scale-105 hover:shadow-2xl">
 

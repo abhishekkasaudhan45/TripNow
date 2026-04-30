@@ -16,3 +16,13 @@ export const getAdminBookings = (token, params = {}) =>
       Authorization: `Bearer ${token}`,
     },
   });
+
+// ✅ GET ALL AI TRIPS
+export const getAllTrips = async () => {
+  return await api.get("/api/bookings");
+};
+
+// 🗑️ DELETE TRIP
+export const deleteTrip = (id) => {
+  return api.delete(`/api/bookings/${id}`);
+};

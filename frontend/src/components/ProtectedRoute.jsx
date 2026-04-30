@@ -1,10 +1,12 @@
 import { Navigate } from "react-router-dom";
 
 function ProtectedRoute({ children }) {
-  const token = sessionStorage.getItem("token");
+  // ✅ FIX: Check localStorage (consistent with Login/Signup save location)
+  const token = localStorage.getItem("token");
 
   if (!token) {
-    return <Navigate to="/admin/login" replace />;
+    // ✅ FIX: Redirect to /login not /admin/login
+    return <Navigate to="/login" replace />;
   }
 
   return children;

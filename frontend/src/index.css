@@ -1,109 +1,41 @@
+/* ── Fonts must be FIRST before @import "tailwindcss" ── */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #020617;
-  --text-primary: #ffffff;
   --accent: #f59e0b;
 }
 
 body {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  /* Using our premium font */
-  font-family: 'Plus Jakarta Sans', sans-serif; 
+  margin: 0;
+  font-family: 'DM Sans', sans-serif;
 }
 
-/* =========================================
-   🌌 1. PREMIUM MESH GRADIENT (FIXED)
-   ========================================= */
-.mesh-bg {
-  background: radial-gradient(circle at 20% 30%, #1e3a8a, transparent 40%),
-              radial-gradient(circle at 80% 20%, #f59e0b40, transparent 40%),
-              radial-gradient(circle at 50% 80%, #0f172a, transparent 50%);
-  background-color: #020617;
-  /* You MUST have a background size larger than 100% for the animation to move! */
-  background-size: 200% 200%; 
-  animation: gradientMove 15s ease infinite alternate;
-}
-
-@keyframes gradientMove {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-/* =========================================
-   🧊 2. GLASSMORPHISM
-   ========================================= */
 .glass-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(20px);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   border-radius: 20px;
-}
-
-/* =========================================
-   🎬 3. MICRO-INTERACTIONS & LOADERS
-   ========================================= */
-.reveal {
-  opacity: 0;
-  transform: translateY(40px);
-  transition: all 0.8s ease;
-}
-
-.reveal.active {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.animate-fadeIn { animation: fadeIn 0.7s ease forwards; }
 
-.animate-fadeIn {
-  animation: fadeIn 1s ease forwards;
-}
-
-/* ✨ Skeleton Loading Shimmer */
 @keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
+  0%   { background-position: -1000px 0; }
+  100% { background-position:  1000px 0; }
 }
-
 .skeleton-shimmer {
-  background: linear-gradient(
-    90deg, 
-    rgba(255,255,255,0.05) 25%, 
-    rgba(255,255,255,0.15) 50%, 
-    rgba(255,255,255,0.05) 75%
-  );
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.05) 75%);
   background-size: 1000px 100%;
   animation: shimmer 1.5s infinite linear;
 }
-/* 🌌 Gradient Background */
-.mesh-bg {
-  background: radial-gradient(circle at 20% 30%, #1e3a8a, transparent 40%),
-              radial-gradient(circle at 80% 20%, #f59e0b, transparent 40%),
-              radial-gradient(circle at 50% 80%, #020617, transparent 50%);
-  background-color: #020617;
-}
 
-/* 🧊 Glass Effect */
-.glass-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
-  border-radius: 20px;
+@keyframes scaleIn {
+  from { transform: scale(0.92); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
 }
-.glass-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 40px rgba(255, 193, 7, 0.15);
-}
+.animate-scaleIn { animation: scaleIn 0.2s ease-out; }

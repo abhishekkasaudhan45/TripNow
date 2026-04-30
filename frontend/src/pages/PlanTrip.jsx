@@ -1,12 +1,17 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../lib/api";
+import jsPDF from "jspdf"; // ✅ IMPORT ADDED
 
 /* ─────────────────────────────────────────
    Safe JSON parser
 ───────────────────────────────────────── */
 function parseTripData(raw) {
   if (!raw) return null;
+
+  // ✅ If already object → return directly
+  if (typeof raw === "object") return raw;
+
   try {
     const clean = raw
       .replace(/^```json\s*/i, "")
@@ -38,7 +43,12 @@ export default function PlanTrip() {
   const [rawText, setRawText]     = useState("");   
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState("");
-  const [openDays, setOpenDays]   = useState({ day0: true }); 
+  
+  // 🔥 UI Feedback States
+  const [showSuccess, setShowSuccess] = useState(false); // For the Top Banner
+  const [showToast, setShowToast]     = useState(false); // For the Bottom Toast
+
+  const [openDays, setOpenDays]   = useState({ 0: true }); 
   const [activeTab, setActiveTab] = useState("Itinerary");
 
   // Fetch AI Data
@@ -49,6 +59,8 @@ export default function PlanTrip() {
       try {
         setLoading(true);
         setError("");
+        setShowSuccess(false);
+        setShowToast(false); // Reset toast state
 
         const res = await api.post("/api/ai", {
           destination,
@@ -62,6 +74,21 @@ export default function PlanTrip() {
 
         const parsed = parseTripData(raw);
         setTripData(parsed);
+
+        // ✅ Step 1: Show banner first
+        setShowSuccess(true);
+
+        setTimeout(() => {
+          setShowSuccess(false);
+
+          // ✅ Step 2: then show toast (sequential UX)
+          setShowToast(true);
+
+          setTimeout(() => {
+            setShowToast(false);
+          }, 2000);
+
+        }, 1500);
 
       } catch (err) {
         console.error("AI Generation Error:", err);
@@ -86,36 +113,70 @@ export default function PlanTrip() {
     }));
   };
 
-  // Helper for dynamic colors in timeline
-  const getDayColorClass = (index) => {
-    const colors = ["d1", "d2", "d3", "d4"];
-    return colors[index % colors.length];
-  };
-  
-  const getDotColorClass = (type) => {
-    if(type === 'morning') return 'slot-dot-amber';
-    if(type === 'afternoon') return 'slot-dot-sky';
-    return 'slot-dot-violet'; // evening
+  // ✅ PDF DOWNLOAD FUNCTION
+  const downloadPDF = () => {
+    if (!tripData) return;
+
+    const doc = new jsPDF();
+
+    let y = 10;
+
+    doc.setFontSize(16);
+    doc.text(`Trip to ${destination}`, 10, y);
+    y += 10;
+
+    doc.setFontSize(12);
+    doc.text(`Dates: ${startDate} → ${endDate}`, 10, y);
+    y += 10;
+
+    doc.text(`Budget: ₹${budget}`, 10, y);
+    y += 10;
+
+    tripData.days?.forEach((day) => {
+      doc.setFontSize(13);
+      doc.text(`Day ${day.day}: ${day.title}`, 10, y);
+      y += 6;
+
+      doc.setFontSize(10);
+      
+      // Basic wrapping to prevent long text from running off the page width
+      const morningText = doc.splitTextToSize(`Morning: ${day.morning}`, 180);
+      doc.text(morningText, 10, y);
+      y += (morningText.length * 5);
+
+      const afternoonText = doc.splitTextToSize(`Afternoon: ${day.afternoon}`, 180);
+      doc.text(afternoonText, 10, y);
+      y += (afternoonText.length * 5);
+
+      const eveningText = doc.splitTextToSize(`Evening: ${day.evening}`, 180);
+      doc.text(eveningText, 10, y);
+      y += (eveningText.length * 5) + 3;
+
+      if (y > 270) {
+        doc.addPage();
+        y = 10;
+      }
+    });
+
+    doc.save(`${destination}-trip.pdf`);
   };
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
-        @import url('[https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap](https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap)');
-
-        /* 🌟 NEW: Bright, Airy Sunset/Ocean Gradient Background */
+         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
+        /* 🌟 Bright, Airy Sunset/Ocean Gradient Background */
         .travel-vibe-bg {
           position: fixed;
           top: 0;
           left: 0;
           width: 100vw;
           height: 100vh;
-          background: #f4f7f6; /* Soft light canvas */
+          background: #f4f7f6;
           z-index: -1;
           overflow: hidden;
         }
 
-        /* Sunrise Peach Glow */
         .orb-1 {
           position: absolute;
           top: -10%; left: -10%; width: 50vw; height: 50vw;
@@ -124,7 +185,6 @@ export default function PlanTrip() {
           animation: float 20s ease-in-out infinite;
         }
 
-        /* Ocean Blue Glow */
         .orb-2 {
           position: absolute;
           bottom: -20%; right: -10%; width: 60vw; height: 60vw;
@@ -133,7 +193,6 @@ export default function PlanTrip() {
           animation: float 25s ease-in-out infinite reverse;
         }
 
-        /* Morning Violet/Pink Glow */
         .orb-3 {
           position: absolute;
           top: 30%; left: 30%; width: 40vw; height: 40vw;
@@ -149,7 +208,33 @@ export default function PlanTrip() {
           100% { transform: translate(0, 0) scale(1); }
         }
 
-        /* 🌟 UPDATED: Light Mode Variables */
+        /* 🔥 NEW SUCCESS ANIMATIONS */
+        @keyframes slideDown {
+          0% { opacity: 0; transform: translate(-50%, -20px); }
+          100% { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .animate-slideDown {
+          animation: slideDown 0.4s ease-out forwards;
+        }
+        
+        @keyframes slideUp {
+          0% { opacity: 0; transform: translateY(20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slideUp {
+          animation: slideUp 0.4s ease-out forwards;
+        }
+
+        @keyframes popIn {
+          0% { transform: scale(0.8); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes bounceEmoji {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-12px); }
+        }
+
+        /* 🌟 Light Mode Variables */
         .plan-trip-container {
           --font-head: 'Instrument Serif', Georgia, serif;
           --font-ui: 'Space Grotesk', sans-serif;
@@ -161,12 +246,10 @@ export default function PlanTrip() {
           --border: rgba(255, 255, 255, 0.8);
           --border-2: rgba(0, 0, 0, 0.06);
           
-          /* Dark text for light mode */
           --text: #1e293b;
           --muted: #64748b;
           --dim: #94a3b8;
           
-          /* Deepened accents for contrast */
           --amber: #f59e0b;
           --amber-dim: rgba(245, 158, 11, 0.15);
           --amber-text: #b45309;
@@ -193,7 +276,7 @@ export default function PlanTrip() {
           z-index: 1;
         }
 
-        /* 🌟 UPDATED: Bright Frosted Glass Shell */
+        /* 🌟 Bright Frosted Glass Shell */
         .shell { 
           background: rgba(255, 255, 255, 0.55); 
           backdrop-filter: blur(24px);
@@ -307,7 +390,7 @@ export default function PlanTrip() {
         @keyframes loadPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
       `}} />
 
-      {/* 🌟 NEW: Bright & Airy Background Elements */}
+      {/* 🌟 Background Elements */}
       <div className="travel-vibe-bg">
         <div className="orb-1"></div>
         <div className="orb-2"></div>
@@ -315,6 +398,25 @@ export default function PlanTrip() {
       </div>
 
       <div className="plan-trip-container">
+        
+        {/* ✅ SUCCESS ANIMATION (TOP BANNER) */}
+        {showSuccess && !error && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-slideDown">
+            <div className="bg-emerald-500 text-white px-6 py-3 rounded-xl shadow-xl font-bold flex items-center gap-2">
+              🎉 Trip Ready!
+            </div>
+          </div>
+        )}
+
+        {/* ✅ TOAST MESSAGE (BOTTOM RIGHT) */}
+        {showToast && !error && (
+          <div className="fixed bottom-6 right-6 z-50 animate-slideUp">
+            <div className="bg-emerald-500 text-white px-5 py-3 rounded-lg shadow-xl font-bold flex items-center gap-2">
+              💾 Trip saved successfully!
+            </div>
+          </div>
+        )}
+
         <div className="shell">
           <div className="topbar">
             <div className="topbar-left">
@@ -383,13 +485,36 @@ export default function PlanTrip() {
                     Trip to <span>{destination || "Unknown"}</span>
                   </div>
                   <div className="page-sub">
-                    {loading ? "AI is crafting your perfect itinerary..." : "Generated by AI · Complete itinerary · Ready to explore"}
+                    {loading || showSuccess ? "AI is crafting your perfect itinerary..." : "Generated by AI · Complete itinerary · Ready to explore"}
                   </div>
                 </div>
+                
+                {/* ✅ UPDATED BUTTON SECTION */}
+                {!loading && !error && tripData && (
+                  <div className="flex gap-3 hidden sm:flex">
+                    <button 
+                      onClick={downloadPDF}
+                      className="bg-white/80 px-4 py-2 rounded-lg font-bold text-sm hover:scale-105 transition shadow-sm text-slate-800"
+                    >
+                      📄 Download PDF
+                    </button>
+
+                    <button 
+                     onClick={() =>
+  navigate("/booking", {
+    state: { destination, budget, checkin: startDate, checkout: endDate, tripData }
+  })
+}
+                      className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black px-4 py-2 rounded-lg font-bold hover:scale-105 transition shadow-sm"
+                    >
+                      View Dashboard
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Loading State */}
-              {loading && (
+              {/* 🔄 LOADING STATE */}
+              {loading && !showSuccess && (
                  <div className="content" style={{alignItems: 'center', justifyContent: 'center'}}>
                     <div style={{textAlign: 'center', color: 'var(--muted)'}}>
                         <div style={{fontSize: '48px', marginBottom: '24px'}} className="loading-pulse">🏖️</div>
@@ -399,8 +524,8 @@ export default function PlanTrip() {
                  </div>
               )}
 
-              {/* Error State */}
-              {!loading && error && (
+              {/* ❌ ERROR STATE */}
+              {!loading && !showSuccess && error && (
                 <div className="content" style={{alignItems: 'center', justifyContent: 'center'}}>
                     <div style={{textAlign: 'center', background: 'var(--rose-dim)', padding: '24px', borderRadius: '12px', border: '1px solid rgba(244, 63, 94, 0.3)'}}>
                         <div style={{fontSize: '48px', marginBottom: '16px'}}>⚠️</div>
@@ -410,8 +535,27 @@ export default function PlanTrip() {
                  </div>
               )}
 
-              {/* Loaded Content */}
-              {!loading && !error && tripData && (
+              {/* 🎉 SUCCESS ANIMATION STATE (In Center before layout reveals) */}
+              {showSuccess && !error && (
+                <div className="content" style={{alignItems: 'center', justifyContent: 'center'}}>
+                  <div style={{
+                      textAlign: 'center', 
+                      background: 'rgba(255,255,255,0.9)', 
+                      padding: '48px', 
+                      borderRadius: '24px', 
+                      border: '1px solid rgba(16, 185, 129, 0.3)', 
+                      boxShadow: '0 20px 40px rgba(0,0,0,0.05)', 
+                      animation: 'popIn 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
+                  }}>
+                      <div style={{fontSize: '64px', marginBottom: '16px', animation: 'bounceEmoji 1.5s infinite'}}>🎉</div>
+                      <h2 style={{color: 'var(--emerald-text)', fontSize: '28px', fontWeight: '800', marginBottom: '8px', fontFamily: "var(--font-head)"}}>Trip Ready!</h2>
+                      <p style={{color: 'var(--muted)', fontSize: '15px', fontWeight: '500'}}>Your personalized itinerary is cooked to perfection.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ✅ LOADED CONTENT STATE */}
+              {!loading && !showSuccess && !error && tripData && (
                 <>
                   {tripData.bestTimeToVisit && activeTab === "Itinerary" && (
                     <div className="alert-bar">

@@ -1,50 +1,52 @@
-import { Routes, Route } from "react-router-dom"; 
-import Home from "./pages/Home";
-import Booking from "./pages/Booking";
-import Admin from "./pages/Admin";
-import PlanTrip from "./pages/PlanTrip";
-import Login from "./pages/Login";
-import NotFound from "./pages/NotFound";
-import Dashboard from "./pages/Dashboard";
+import { Routes, Route } from "react-router-dom";
+
+// Layout
+import MainLayout from "./layouts/MainLayout";
+
+// Pages
+import Home       from "./pages/Home";
+import Booking    from "./pages/Booking";
+import Admin      from "./pages/Admin";
+import PlanTrip   from "./pages/PlanTrip";
+import Login      from "./pages/Login";
+import Signup     from "./pages/Signup";
+import Dashboard  from "./pages/Dashboard";
+import NotFound   from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
-import Signup from "./pages/Signup";
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      {/* ✅ ALL routes wrapped in MainLayout → Header + Footer always visible */}
+      <Route element={<MainLayout />}>
 
-      {/* Booking Routes */}
-      <Route path="/booking" element={<Booking />} />
-      <Route path="/booking/:id" element={<Booking />} />
+        {/* Public pages */}
+        <Route path="/"         element={<Home />} />
+        // After /plan-trip route
+<Route path="/booking" element={<PlanTrip />} />
+<Route path="/booking" element={<Booking />} />
 
-      {/* Admin & Auth Routes */}
-      <Route path="/admin/login" element={<Login />} />
-      <Route path="/admin/signup" element={<Signup />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route 
-        path="/admin" 
-        element={
-          <ProtectedRoute>
-            <Admin />
-          </ProtectedRoute>
-        } 
-      />
+        {/* ✅ FIXED: /login and /signup (not /admin/login) */}
+        <Route path="/login"    element={<Login />} />
+        <Route path="/signup"   element={<Signup />} />
 
-      {/* User Feature Routes */}
-<Route path="/plan-trip" element={<PlanTrip />} />      
-      {/* Protected User Dashboard */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
+        {/* AI trip planner */}
+        <Route path="/plan-trip" element={<PlanTrip />} />
+        <Route path="/trip/:id"  element={<PlanTrip />} />
 
-      {/* Fallback 404 */}
-      <Route path="*" element={<NotFound />} />
+        {/* Dashboard — protected */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute><Dashboard /></ProtectedRoute>
+        } />
+
+        {/* Admin — protected */}
+        <Route path="/admin" element={
+          <ProtectedRoute><Admin /></ProtectedRoute>
+        } />
+
+        {/* 404 */}
+        <Route path="*" element={<NotFound />} />
+      </Route>
     </Routes>
   );
 }
