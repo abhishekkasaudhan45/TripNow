@@ -164,7 +164,8 @@ export default function PlanTrip() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
-         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
+        @import url('[https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap](https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap)');
+        
         /* 🌟 Bright, Airy Sunset/Ocean Gradient Background */
         .travel-vibe-bg {
           position: fixed;
@@ -324,7 +325,7 @@ export default function PlanTrip() {
         .trip-stat-val { font-size: 13px; font-weight: 700; color: var(--text); }
 
         .main { display: flex; flex-direction: column; overflow: hidden; background: transparent; }
-        .page-header { padding: 24px 32px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+        .page-header { padding: 24px 32px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
         .page-title { font-family: var(--font-head); font-size: 36px; font-weight: 400; color: var(--text); line-height: 1.1; margin-bottom: 6px; }
         .page-title span { font-style: italic; color: var(--amber-text); text-transform: capitalize; }
         .page-sub { font-size: 13px; color: var(--muted); font-weight: 500; }
@@ -333,14 +334,15 @@ export default function PlanTrip() {
         .alert-icon { width: 18px; height: 18px; border-radius: 50%; background: var(--sky); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
         .alert-text { font-size: 13px; font-weight: 500; color: var(--sky-text); }
 
-        .tabs { padding: 0 32px; display: flex; gap: 8px; border-bottom: 1px solid var(--border-2); margin-top: 8px; }
-        .tab { padding: 12px 16px; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; text-transform: uppercase; letter-spacing: .06em; transition: all .2s; }
+        .tabs { padding: 0 32px; display: flex; gap: 8px; border-bottom: 1px solid var(--border-2); margin-top: 8px; overflow-x: auto; }
+        .tab { padding: 12px 16px; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; text-transform: uppercase; letter-spacing: .06em; transition: all .2s; white-space: nowrap; }
         .tab:hover { color: var(--text); }
         .tab.active { color: var(--amber-text); border-bottom-color: var(--amber); }
 
         .content { flex: 1; overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 16px; }
 
         .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        @media (max-width: 768px) { .stats-row { grid-template-columns: 1fr 1fr; } }
         .stat-card { background: rgba(255,255,255,0.7); border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.02); border-radius: 12px; padding: 16px; transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-2px); border-color: var(--amber-dim); }
         .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
@@ -381,6 +383,7 @@ export default function PlanTrip() {
         .budget-total .budget-val { font-size: 18px; color: var(--emerald-text); }
 
         .tips-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 768px) { .tips-grid { grid-template-columns: 1fr; } }
         .tip-card { background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 15px rgba(0,0,0,0.02); border-radius: 8px; padding: 14px 16px; display: flex; gap: 12px; transition: transform 0.2s; }
         .tip-card:hover { transform: translateY(-2px); border-color: var(--amber-dim); }
         .tip-num { font-size: 13px; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 20px; }
@@ -489,9 +492,10 @@ export default function PlanTrip() {
                   </div>
                 </div>
                 
-                {/* ✅ UPDATED BUTTON SECTION */}
+                {/* ✅ PERFECTED BUTTON CLUSTER */}
                 {!loading && !error && tripData && (
-                  <div className="flex gap-3 hidden sm:flex">
+                  <div className="flex flex-wrap items-center gap-3 mt-4 lg:mt-0 w-full lg:w-auto">
+                    
                     <button 
                       onClick={downloadPDF}
                       className="bg-white/80 px-4 py-2 rounded-lg font-bold text-sm hover:scale-105 transition shadow-sm text-slate-800"
@@ -500,15 +504,21 @@ export default function PlanTrip() {
                     </button>
 
                     <button 
-                     onClick={() =>
-  navigate("/booking", {
-    state: { destination, budget, checkin: startDate, checkout: endDate, tripData }
-  })
-}
-                      className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black px-4 py-2 rounded-lg font-bold hover:scale-105 transition shadow-sm"
+                      onClick={() => navigate("/dashboard")}
+                      className="bg-white/20 border border-white/30 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-white/30 transition shadow-sm"
                     >
                       View Dashboard
                     </button>
+
+                    <button 
+                      onClick={() => navigate("/booking", {
+                        state: { destination, budget, checkin: startDate, checkout: endDate, tripData }
+                      })}
+                      className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black px-5 py-2 rounded-lg font-bold hover:scale-105 transition shadow-md"
+                    >
+                      ✈️ Book This Trip →
+                    </button>
+                    
                   </div>
                 )}
               </div>

@@ -11,24 +11,30 @@ import PlanTrip   from "./pages/PlanTrip";
 import Login      from "./pages/Login";
 import Signup     from "./pages/Signup";
 import Dashboard  from "./pages/Dashboard";
+import SharedTrip from "./pages/SharedTrip"; // ✅ NEW
 import NotFound   from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <Routes>
-      {/* ✅ ALL routes wrapped in MainLayout → Header + Footer always visible */}
+      {/*
+        ✅ /shared-trip/:id is OUTSIDE MainLayout on purpose.
+        Shared pages have no nav/footer — clean standalone view
+        optimised for external visitors and viral sharing.
+      */}
+      <Route path="/shared-trip/:id" element={<SharedTrip />} />
+
+      {/* All other routes wrapped in MainLayout → Header + Footer */}
       <Route element={<MainLayout />}>
 
         {/* Public pages */}
-        <Route path="/"         element={<Home />} />
-        // After /plan-trip route
-<Route path="/booking" element={<PlanTrip />} />
-<Route path="/booking" element={<Booking />} />
+        <Route path="/"          element={<Home />} />
+        <Route path="/login"     element={<Login />} />
+        <Route path="/signup"    element={<Signup />} />
 
-        {/* ✅ FIXED: /login and /signup (not /admin/login) */}
-        <Route path="/login"    element={<Login />} />
-        <Route path="/signup"   element={<Signup />} />
+        {/* Booking confirmation */}
+        <Route path="/booking"   element={<Booking />} />
 
         {/* AI trip planner */}
         <Route path="/plan-trip" element={<PlanTrip />} />
@@ -44,7 +50,7 @@ function App() {
           <ProtectedRoute><Admin /></ProtectedRoute>
         } />
 
-        {/* 404 */}
+        {/* 404 fallback */}
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

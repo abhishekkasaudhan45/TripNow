@@ -35,7 +35,7 @@ const GRADIENTS = [
 ];
 
 // ── Trip Card ──────────────────────────────────────────────────────────────
-function TripCard({ trip, index, onView, onDelete }) {
+function TripCard({ trip, index, onView, onDelete, onShare }) {
   const days = daysBetween(trip.checkin, trip.checkout);
   const grad = GRADIENTS[index % GRADIENTS.length];
   const emoji = getDestinationEmoji(trip.destination);
@@ -104,7 +104,7 @@ function TripCard({ trip, index, onView, onDelete }) {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
             style={{ background: "rgba(255,255,255,0.7)", color: "#374151" }}
           >
-            👥 {trip.guests} guest{trip.guests !== 1 ? "s" : ""}
+            👥 {trip.guests ?? 1} guest{(trip.guests ?? 1) !== 1 ? "s" : ""}
           </div>
         </div>
 
@@ -117,7 +117,26 @@ function TripCard({ trip, index, onView, onDelete }) {
           </span>
 
           <div className="flex items-center gap-2">
-            {/* ✅ UPDATED TO OPEN MODAL INSTEAD OF INSTANT DELETE */}
+            
+            {/* ✅ NEW SHARE BUTTON */}
+            <button
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                onShare(trip._id); 
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition"
+              style={{
+                background: "rgba(245,158,11,0.12)",
+                color: "#b45309",
+                border: "1px solid rgba(245,158,11,0.3)",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(245,158,11,0.22)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(245,158,11,0.12)"}
+            >
+              🔗 <span>Share</span>
+            </button>
+
+            {/* DELETE BUTTON */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -206,11 +225,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState("all"); 
 
-  // ✅ STEP 1: Modal & Undo States Added Here
   const [deleteId, setDeleteId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [undoData, setUndoData] = useState(null);
   const [showUndo, setShowUndo] = useState(false);
+
+  // ✅ Share toast state
+  const [showCopied, setShowCopied] = useState(false);
 
   useEffect(() => {
     getAllTrips()
@@ -222,33 +243,31 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ✅ STEP 2: Opens the modal instead of instantly deleting
+  // ✅ Share Handler
+  const handleShare = (id) => {
+    const url = `${window.location.origin}/shared-trip/${id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShowCopied(true);
+      setTimeout(() => setShowCopied(false), 2500);
+    });
+  };
+
   const handleDeleteClick = (id) => {
     setDeleteId(id);
     setShowModal(true);
   };
 
-  // ✅ STEP 3: Actual Delete Function (Confirmed)
   const confirmDelete = async () => {
     try {
       const tripToDelete = trips.find(t => t._id === deleteId);
-      
-      // Perform DB Deletion
       await deleteTrip(deleteId);
-
-      // Update UI
       setTrips(prev => prev.filter(t => t._id !== deleteId));
-
-      // Save for undo
       setUndoData(tripToDelete);
       setShowUndo(true);
-
-      // Auto-hide undo toast
       setTimeout(() => {
         setShowUndo(false);
         setUndoData(null);
       }, 4000);
-
     } catch (err) {
       console.error("Error deleting trip:", err);
     } finally {
@@ -257,10 +276,8 @@ export default function Dashboard() {
     }
   };
 
-  // ✅ STEP 4: Undo Function
   const undoDelete = () => {
     if (undoData) {
-      // Re-add to UI (Note: If you want it truly back in DB, you'd need a restore API endpoint)
       setTrips(prev => [undoData, ...prev]);
       setShowUndo(false);
     }
@@ -291,7 +308,6 @@ export default function Dashboard() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
         
-        /* Added animations for Modals and Toasts */
         @keyframes scaleIn {
           from { opacity: 0; transform: scale(0.95); }
           to { opacity: 1; transform: scale(1); }
@@ -309,7 +325,6 @@ export default function Dashboard() {
         }
       `}</style>
 
-      {/* ── Noise overlay for depth ── */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
         style={{
@@ -428,7 +443,8 @@ export default function Dashboard() {
                     trip={trip} 
                     index={i} 
                     onView={handleView} 
-                    onDelete={handleDeleteClick} // ✅ Pass the click handler instead of confirm
+                    onDelete={handleDeleteClick}
+                    onShare={handleShare} // ✅ PASSED SHARE HANDLER HERE
                   />
                 ))
             }
@@ -442,7 +458,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ✅ STEP 5: DELETE CONFIRMATION MODAL */}
+      {/* ── DELETE CONFIRMATION MODAL ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100]">
           <div className="bg-white p-6 rounded-2xl w-[90%] max-w-sm shadow-2xl animate-scaleIn border border-gray-100">
@@ -470,7 +486,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ✅ STEP 6: UNDO TOAST (BOTTOM RIGHT) */}
+      {/* ── UNDO TOAST ── */}
       {showUndo && (
         <div className="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 z-[100] animate-slideUp border border-slate-700">
           <span className="text-sm font-medium">Trip deleted</span>
@@ -480,6 +496,23 @@ export default function Dashboard() {
           >
             Undo
           </button>
+        </div>
+      )}
+
+      {/* ✅ LINK COPIED TOAST (bottom-left) */}
+      {showCopied && (
+        <div className="fixed bottom-6 left-6 z-[100] animate-slideUp">
+          <div
+            className="flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border"
+            style={{ 
+              background: "linear-gradient(135deg, #f59e0b, #ef4444)", 
+              borderColor: "rgba(255,255,255,0.2)", 
+              color: "#fff" 
+            }}
+          >
+            <span style={{ fontSize: "18px" }}>🔗</span>
+            <span className="text-sm font-bold">Link copied to clipboard!</span>
+          </div>
         </div>
       )}
 
