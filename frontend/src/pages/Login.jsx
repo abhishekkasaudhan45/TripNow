@@ -13,17 +13,23 @@ export default function Login() {
     e.preventDefault();
     setErr(""); setLoading(true);
     try {
-      // ✅ FIX: correct endpoint /api/auth/login
+      // ✅ Endpoint correct: /api/auth/login
       const res = await api.post("/api/auth/login", form);
       const token = res.data?.data?.token || res.data?.token;
+      
       if (!token) throw new Error("No token received");
-      // ✅ Save to localStorage so ProtectedRoute + api.js interceptor both find it
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(res.data?.data?.user || {}));
-      navigate("/dashboard");
+      
+      // ✅ Save to sessionStorage
+      sessionStorage.setItem("token", token);
+      sessionStorage.setItem("user", JSON.stringify(res.data?.data?.user || {}));
+      
+      // 🔥 FIX: Navigate to /admin instead of /dashboard
+      navigate("/admin");
     } catch (e) {
       setErr(e?.response?.data?.message || "Invalid email or password");
-    } finally { setLoading(false); }
+    } finally { 
+      setLoading(false); 
+    }
   }
 
   return (

@@ -1,12 +1,12 @@
 import { Navigate } from "react-router-dom";
 
 function ProtectedRoute({ children }) {
-  // ✅ FIX: Check localStorage (consistent with Login/Signup save location)
-  const token = localStorage.getItem("token");
+  // ✅ FIX 1: Match the sessionStorage used in Login.jsx
+  const token = sessionStorage.getItem("token");
 
   if (!token) {
-    // ✅ FIX: Redirect to /login not /admin/login
-    return <Navigate to="/login" replace />;
+    // ✅ FIX 2: Redirect to the correct professional admin login route
+    return <Navigate to="/admin/login" replace />;
   }
 
   return children;

@@ -29,11 +29,9 @@ export const deleteTrip = (id) => {
 
 // ✅ NEW — fetch a single trip publicly (no auth header sent)
 // Uses native fetch so the Axios auth interceptor is bypassed entirely
+// frontend/src/services/bookingService.js
 export const getSharedTrip = async (id) => {
-  const baseURL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-  const res = await fetch(`${baseURL}/api/bookings/shared/${id}`);
-  
+  const res = await fetch(`http://localhost:5000/api/bookings/shared/${id}`);
   if (!res.ok) throw new Error("Trip not found");
-  
-  return res.json(); // { success: true, data: trip }
+  return res.json();
 };

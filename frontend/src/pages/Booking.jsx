@@ -48,18 +48,18 @@ export default function Booking() {
 
     try {
       const payload = {
-        destination,
-        budget,
-        startDate,
-        endDate,
-        dayCount,
-        fullName:  form.fullName,
-        email:     form.email,
-        phone:     form.phone,
-        travelers: Number(form.travelers),
-        notes:     form.notes,
-        tripData:  tripData || null,
-      };
+  destination,
+  guests: Number(form.travelers),    
+  checkin: startDate,               
+  checkout: endDate,               
+  budget,                          
+  dayCount,                        
+  fullName: form.fullName,          
+  email: form.email,              
+  phone: form.phone,               
+  notes: form.notes,              
+  aiPlan: tripData || null,       
+};
 
       const res = await api.post("/api/bookings", payload);
       setBookingId(res.data?.data?._id || "CONFIRMED");

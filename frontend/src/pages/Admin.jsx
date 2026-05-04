@@ -37,16 +37,18 @@ function Admin() {
   const page = Math.max(Number.parseInt(searchParams.get("page") || "1", 10), 1);
   const [reloadToken, setReloadToken] = useState(0);
   
-  const [token, setToken] = useState(getStoredAdminToken);
+  // 🔥 FIXED: Added () so the function executes immediately
+  const [token, setToken] = useState(getStoredAdminToken());
+  
   const [bookings, setBookings] = useState([]);
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // Because of ProtectedRoute, we know the token exists, but we double-check safely
+    // Check for token existence safely
     if (!token) {
-      navigate("/admin/login");
+      navigate("/login");
       return;
     }
 
@@ -66,7 +68,7 @@ function Admin() {
         if (requestError?.response?.status === 401) {
           clearStoredAdminToken();
           setToken("");
-          navigate("/admin/login");
+          navigate("/login");
           return;
         }
         setError(getErrorMessage(requestError, "Unable to load bookings. Please try again."));
@@ -88,7 +90,7 @@ function Admin() {
   const handleLogout = () => {
     clearStoredAdminToken();
     setToken("");
-    navigate("/admin/login");
+    navigate("/login");
   };
 
   const loadingRows = Array.from({ length: 5 }, (_, index) => index);

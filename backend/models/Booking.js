@@ -14,6 +14,7 @@ const bookingSchema = new mongoose.Schema(
         message: "Destination cannot be empty",
       },
     },
+    // ⚠️ KEPT AS 'guests' to prevent breaking your Dashboard and controllers
     guests: {
       type: Number,
       required: [true, "Number of guests is required"],
@@ -23,6 +24,7 @@ const bookingSchema = new mongoose.Schema(
         message: "Guests must be a whole number",
       },
     },
+    // ⚠️ KEPT AS 'checkin' to prevent breaking your frontend calculations
     checkin: {
       type: Date,
       required: [true, "Check-in date is required"],
@@ -31,6 +33,7 @@ const bookingSchema = new mongoose.Schema(
         message: "Check-in must be a valid date",
       },
     },
+    // ⚠️ KEPT AS 'checkout' to maintain compatibility
     checkout: {
       type: Date,
       required: [true, "Check-out date is required"],
@@ -48,9 +51,19 @@ const bookingSchema = new mongoose.Schema(
         },
       ],
     },
-    // ✅ Optional field — stores AI-generated trip plan
+
+    // ✅ NEWLY ADDED FIELDS (Safe to add)
+    budget:   { type: String, default: null },
+    fullName: { type: String, trim: true },
+    email:    { type: String, trim: true },
+    phone:    { type: String, trim: true },
+    notes:    { type: String, default: null },
+    dayCount: { type: Number, default: 0 },
+    tripData: { type: mongoose.Schema.Types.Mixed, default: null },
+
+    // ✅ KEPT AS MIXED/OBJECT so your JSON AI responses don't break the UI
     aiPlan: {
-      type: String,
+      type: mongoose.Schema.Types.Mixed,
       default: null,
     },
   },
