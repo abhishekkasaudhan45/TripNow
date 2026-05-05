@@ -1,3 +1,4 @@
+// frontend/src/services/bookingService.js
 import api from "../lib/api";
 
 // CREATE BOOKING
@@ -12,24 +13,22 @@ export const loginAdmin = (password) =>
 export const getAdminBookings = (token, params = {}) =>
   api.get("/api/admin/bookings", {
     params,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
-// ✅ GET ALL AI TRIPS
-export const getAllTrips = async () => {
-  return await api.get("/api/bookings");
-};
+// GET ALL TRIPS (Dashboard)
+export const getAllTrips = async () =>
+  api.get("/api/bookings");
 
-// 🗑️ DELETE TRIP
-export const deleteTrip = (id) => {
-  return api.delete(`/api/bookings/${id}`);
-};
+// DELETE TRIP
+export const deleteTrip = (id) =>
+  api.delete(`/api/bookings/${id}`);
 
-// ✅ NEW — fetch a single trip publicly (no auth header sent)
-// Uses native fetch so the Axios auth interceptor is bypassed entirely
-// frontend/src/services/bookingService.js
+// ✅ UPDATE TRIP (Edit dates, destination, guests, budget, notes)
+export const updateTrip = (id, payload) =>
+  api.put(`/api/bookings/${id}`, payload);
+
+// PUBLIC shared trip (no auth header)
 export const getSharedTrip = async (id) => {
   const res = await fetch(`http://localhost:5000/api/bookings/shared/${id}`);
   if (!res.ok) throw new Error("Trip not found");

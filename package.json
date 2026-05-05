@@ -12,7 +12,9 @@
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
+    "leaflet": "^1.9.4",
     "razorpay": "^2.9.6",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.13.0"
   }
 }

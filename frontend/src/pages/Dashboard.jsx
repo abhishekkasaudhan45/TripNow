@@ -1,13 +1,23 @@
 // frontend/src/pages/Dashboard.jsx
-// FIX: Share button moved to its own row so it never gets hidden by overflow
+// NEW FEATURES:
+//   ✅ Edit modal — destination, check-in, check-out, guests, budget, notes
+//   ✅ Save changes via PUT /api/bookings/:id
+//   ✅ Inline validation before saving
+//   ✅ Success toast on save
+//   ✅ Share, Delete, Undo all preserved
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getAllTrips, deleteTrip } from "../services/bookingService";
+import { getAllTrips, deleteTrip, updateTrip } from "../services/bookingService";
 
+// ── helpers ────────────────────────────────────────────────────────────────
 function formatDate(d) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" });
+}
+function toInputDate(d) {
+  if (!d) return "";
+  return new Date(d).toISOString().split("T")[0]; // "YYYY-MM-DD" for <input type="date">
 }
 function daysBetween(a, b) {
   if (!a || !b) return 0;
@@ -32,7 +42,7 @@ const GRADIENTS = [
 ];
 
 // ── Trip Card ──────────────────────────────────────────────────────────────
-function TripCard({ trip, index, onView, onDelete, onShare }) {
+function TripCard({ trip, index, onView, onDelete, onShare, onEdit }) {
   const days  = daysBetween(trip.checkin, trip.checkout);
   const grad  = GRADIENTS[index % GRADIENTS.length];
   const emoji = getDestinationEmoji(trip.destination);
@@ -41,22 +51,15 @@ function TripCard({ trip, index, onView, onDelete, onShare }) {
   return (
     <div
       className="group relative rounded-3xl overflow-hidden cursor-pointer"
-      style={{
-        background: "rgba(255,255,255,0.72)",
-        backdropFilter: "blur(20px)",
-        border: "1px solid rgba(255,255,255,0.9)",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.07)",
-        transition: "transform 0.25s cubic-bezier(.22,.68,0,1.2), box-shadow 0.25s ease",
-      }}
+      style={{ background:"rgba(255,255,255,0.72)", backdropFilter:"blur(20px)", border:"1px solid rgba(255,255,255,0.9)", boxShadow:"0 4px 24px rgba(0,0,0,0.07)", transition:"transform 0.25s cubic-bezier(.22,.68,0,1.2), box-shadow 0.25s ease" }}
       onMouseEnter={e => { e.currentTarget.style.transform="translateY(-4px) scale(1.01)"; e.currentTarget.style.boxShadow="0 16px 48px rgba(0,0,0,0.13)"; }}
       onMouseLeave={e => { e.currentTarget.style.transform=""; e.currentTarget.style.boxShadow="0 4px 24px rgba(0,0,0,0.07)"; }}
       onClick={() => onView(trip)}
     >
       <div className={`absolute inset-0 bg-gradient-to-br ${grad} opacity-60 pointer-events-none`} />
-
       <div className="relative p-6 flex flex-col gap-4">
 
-        {/* Top: emoji + AI badge */}
+        {/* Top */}
         <div className="flex items-start justify-between gap-2">
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
             style={{ background:"rgba(255,255,255,0.8)", boxShadow:"0 2px 8px rgba(0,0,0,0.08)" }}>
@@ -81,8 +84,8 @@ function TripCard({ trip, index, onView, onDelete, onShare }) {
           </p>
         </div>
 
-        {/* Days + guests pills */}
-        <div className="flex items-center gap-3">
+        {/* Pills */}
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
             style={{ background:"rgba(255,255,255,0.7)", color:"#374151" }}>
             🗓 {days} day{days !== 1 ? "s" : ""}
@@ -91,32 +94,44 @@ function TripCard({ trip, index, onView, onDelete, onShare }) {
             style={{ background:"rgba(255,255,255,0.7)", color:"#374151" }}>
             👥 {trip.guests ?? 1} guest{(trip.guests ?? 1) !== 1 ? "s" : ""}
           </div>
+          {trip.budget && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+              style={{ background:"rgba(255,255,255,0.7)", color:"#374151" }}>
+              💰 ₹{trip.budget}
+            </div>
+          )}
         </div>
 
-        {/* ✅ FIX: Share button gets its OWN full-width row so it's always visible */}
+        {/* Share button — full width row */}
         <button
-          onClick={(e) => { e.stopPropagation(); onShare(trip._id); }}
+          onClick={e => { e.stopPropagation(); onShare(trip._id); }}
           className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition"
-          style={{
-            background: "rgba(245,158,11,0.1)",
-            color: "#b45309",
-            border: "1.5px solid rgba(245,158,11,0.3)",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background="rgba(245,158,11,0.2)"; e.currentTarget.style.borderColor="rgba(245,158,11,0.5)"; }}
-          onMouseLeave={e => { e.currentTarget.style.background="rgba(245,158,11,0.1)"; e.currentTarget.style.borderColor="rgba(245,158,11,0.3)"; }}
+          style={{ background:"rgba(245,158,11,0.1)", color:"#b45309", border:"1.5px solid rgba(245,158,11,0.3)" }}
+          onMouseEnter={e => { e.currentTarget.style.background="rgba(245,158,11,0.2)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background="rgba(245,158,11,0.1)"; }}
         >
           🔗 Share Trip Link
         </button>
 
-        {/* Bottom: "View full plan" label + delete + arrow */}
+        {/* Footer: edit + delete + arrow */}
         <div className="flex items-center justify-between pt-1"
           style={{ borderTop:"1px solid rgba(0,0,0,0.06)" }}>
           <span className="text-xs font-semibold uppercase tracking-widest" style={{ color:"#9ca3af" }}>
             View full plan
           </span>
           <div className="flex items-center gap-2">
+            {/* ✅ Edit button */}
             <button
-              onClick={(e) => { e.stopPropagation(); onDelete(trip._id); }}
+              onClick={e => { e.stopPropagation(); onEdit(trip); }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition"
+              style={{ background:"rgba(99,102,241,0.1)", color:"#4338ca", border:"1px solid rgba(99,102,241,0.25)" }}
+              onMouseEnter={e => e.currentTarget.style.background="rgba(99,102,241,0.2)"}
+              onMouseLeave={e => e.currentTarget.style.background="rgba(99,102,241,0.1)"}
+            >
+              ✏️ Edit
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); onDelete(trip._id); }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold text-red-600 bg-red-100 hover:bg-red-200 transition"
             >
               🗑 Delete
@@ -127,7 +142,6 @@ function TripCard({ trip, index, onView, onDelete, onShare }) {
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );
@@ -164,6 +178,137 @@ function EmptyState({ onPlan }) {
   );
 }
 
+// ── Edit Modal ─────────────────────────────────────────────────────────────
+function EditModal({ trip, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    destination: trip.destination || "",
+    checkin:     toInputDate(trip.checkin),
+    checkout:    toInputDate(trip.checkout),
+    guests:      String(trip.guests ?? 1),
+    budget:      trip.budget || "",
+    notes:       trip.notes  || "",
+  });
+  const [saving, setSaving]   = useState(false);
+  const [err, setErr]         = useState("");
+
+  const handle = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.destination.trim()) { setErr("Destination is required."); return; }
+    if (!form.checkin || !form.checkout)  { setErr("Both dates are required."); return; }
+    if (new Date(form.checkout) <= new Date(form.checkin)) { setErr("Check-out must be after check-in."); return; }
+    if (Number(form.guests) < 1) { setErr("At least 1 guest required."); return; }
+
+    setErr(""); setSaving(true);
+    try {
+      const res = await updateTrip(trip._id, {
+        destination: form.destination.trim(),
+        checkin:  new Date(form.checkin).toISOString(),
+        checkout: new Date(form.checkout).toISOString(),
+        guests:   Number(form.guests),
+        budget:   form.budget.trim(),
+        notes:    form.notes.trim(),
+      });
+      onSaved(res.data.data); // pass updated trip back
+    } catch (e) {
+      setErr(e?.response?.data?.message || "Failed to save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle = {
+    width:"100%", padding:"10px 13px", borderRadius:"10px",
+    border:"1.5px solid rgba(0,0,0,0.1)", background:"rgba(255,255,255,0.9)",
+    fontSize:"14px", fontFamily:"'DM Sans',sans-serif", fontWeight:500,
+    color:"#1e293b", outline:"none",
+  };
+  const labelStyle = { fontSize:"12px", fontWeight:700, color:"#475569", marginBottom:"5px", display:"block" };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+      <div style={{ background:"rgba(255,255,255,0.96)", backdropFilter:"blur(24px)", borderRadius:"20px", width:"100%", maxWidth:"540px", boxShadow:"0 32px 80px rgba(0,0,0,0.18)", border:"1px solid rgba(255,255,255,0.8)", overflow:"hidden" }}>
+
+        {/* Modal header */}
+        <div style={{ background:"linear-gradient(135deg,#f59e0b,#ef4444)", padding:"20px 24px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:"11px", fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"rgba(255,255,255,0.75)", marginBottom:"4px" }}>Edit Trip</div>
+            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"22px", fontWeight:900, color:"#fff", textTransform:"capitalize" }}>{trip.destination}</div>
+          </div>
+          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.2)", border:"none", borderRadius:"8px", color:"#fff", fontSize:"18px", cursor:"pointer", padding:"6px 10px", fontWeight:700 }}>✕</button>
+        </div>
+
+        {/* Modal body */}
+        <div style={{ padding:"24px", display:"flex", flexDirection:"column", gap:"16px", maxHeight:"70vh", overflowY:"auto" }}>
+
+          {/* Destination */}
+          <div>
+            <label style={labelStyle}>✈️ Destination *</label>
+            <input style={inputStyle} name="destination" value={form.destination} onChange={handle} placeholder="e.g. Goa, Manali, Paris" />
+          </div>
+
+          {/* Dates row */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+            <div>
+              <label style={labelStyle}>📅 Check-in *</label>
+              <input style={inputStyle} type="date" name="checkin" value={form.checkin} onChange={handle} />
+            </div>
+            <div>
+              <label style={labelStyle}>📅 Check-out *</label>
+              <input style={inputStyle} type="date" name="checkout" value={form.checkout} onChange={handle} />
+            </div>
+          </div>
+
+          {/* Guests + Budget row */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+            <div>
+              <label style={labelStyle}>👥 Guests *</label>
+              <select style={inputStyle} name="guests" value={form.guests} onChange={handle}>
+                {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                  <option key={n} value={n}>{n} {n===1?"Person":"People"}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>💰 Budget (₹)</label>
+              <input style={inputStyle} name="budget" value={form.budget} onChange={handle} placeholder="e.g. 15000" />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label style={labelStyle}>📝 Notes</label>
+            <textarea
+              style={{ ...inputStyle, resize:"vertical", minHeight:"80px" }}
+              name="notes" value={form.notes} onChange={handle}
+              placeholder="Any special requirements or notes..."
+            />
+          </div>
+
+          {/* Error */}
+          {err && (
+            <div style={{ background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)", borderRadius:"8px", padding:"10px 14px", fontSize:"13px", fontWeight:600, color:"#be123c" }}>
+              ⚠️ {err}
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div style={{ display:"flex", gap:"10px", marginTop:"4px" }}>
+            <button onClick={onClose}
+              style={{ flex:1, padding:"12px", borderRadius:"12px", background:"rgba(0,0,0,0.05)", border:"1.5px solid rgba(0,0,0,0.1)", fontFamily:"'DM Sans',sans-serif", fontSize:"14px", fontWeight:700, color:"#374151", cursor:"pointer" }}>
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving}
+              style={{ flex:2, padding:"12px", borderRadius:"12px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", border:"none", fontFamily:"'DM Sans',sans-serif", fontSize:"14px", fontWeight:800, color:"#fff", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, boxShadow:"0 4px 16px rgba(239,68,68,0.28)" }}>
+              {saving ? "⏳ Saving..." : "💾 Save Changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Dashboard ─────────────────────────────────────────────────────────
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -175,6 +320,8 @@ export default function Dashboard() {
   const [undoData, setUndoData]   = useState(null);
   const [showUndo, setShowUndo]   = useState(false);
   const [showCopied, setShowCopied] = useState(false);
+  const [showSaved, setShowSaved]   = useState(false);  // ✅ save toast
+  const [editTrip, setEditTrip]     = useState(null);   // ✅ trip being edited
 
   useEffect(() => {
     getAllTrips()
@@ -213,6 +360,14 @@ export default function Dashboard() {
     if (undoData) { setTrips(prev => [undoData, ...prev]); setShowUndo(false); }
   };
 
+  // ✅ Called when edit modal saves successfully
+  const handleSaved = (updatedTrip) => {
+    setTrips(prev => prev.map(t => t._id === updatedTrip._id ? updatedTrip : t));
+    setEditTrip(null);
+    setShowSaved(true);
+    setTimeout(() => setShowSaved(false), 2500);
+  };
+
   const filtered     = trips.filter(t => filter === "ai" ? !!t.aiPlan : filter === "manual" ? !t.aiPlan : true);
   const aiCount      = trips.filter(t => !!t.aiPlan).length;
   const totalDays    = trips.reduce((s, t) => s + daysBetween(t.checkin, t.checkout), 0);
@@ -220,16 +375,17 @@ export default function Dashboard() {
   const handleView   = (trip) => navigate(`/trip/${trip._id}`, { state: trip });
 
   return (
-    <div className="min-h-screen" style={{ background:"linear-gradient(135deg,#fff7ed 0%,#fef3c7 20%,#fde8d8 40%,#fce7f3 60%,#ede9fe 80%,#e0f2fe 100%)", fontFamily:"'DM Sans',sans-serif" }}>
+    <div className="min-h-screen"
+      style={{ background:"linear-gradient(135deg,#fff7ed 0%,#fef3c7 20%,#fde8d8 40%,#fce7f3 60%,#ede9fe 80%,#e0f2fe 100%)", fontFamily:"'DM Sans',sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
-        @keyframes scaleIn { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
-        .animate-scaleIn { animation:scaleIn 0.2s ease-out forwards; }
-        @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        .animate-slideUp { animation:slideUp 0.3s ease-out forwards; }
+        @keyframes scaleIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+        .animate-scaleIn{animation:scaleIn 0.2s ease-out forwards;}
+        @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        .animate-slideUp{animation:slideUp 0.3s ease-out forwards;}
       `}</style>
 
-      {/* background blobs */}
+      {/* Background blobs */}
       <div className="fixed inset-0 pointer-events-none z-0" style={{ backgroundImage:`url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")`, opacity:0.4 }} />
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-30" style={{ background:"radial-gradient(circle,#fbbf24 0%,transparent 70%)", filter:"blur(60px)" }} />
@@ -242,7 +398,8 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex items-center justify-between mb-10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-black text-white" style={{ background:"linear-gradient(135deg,#f59e0b,#ef4444)" }}>✦</div>
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-black text-white"
+              style={{ background:"linear-gradient(135deg,#f59e0b,#ef4444)" }}>✦</div>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest" style={{ color:"#9ca3af" }}>TripNow</p>
               <p className="text-sm font-bold" style={{ color:"#111827" }}>Dashboard</p>
@@ -255,7 +412,8 @@ export default function Dashboard() {
         </div>
 
         <div className="mb-8">
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-2" style={{ color:"#111827", fontFamily:"'Playfair Display',serif" }}>Your Journeys</h1>
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-2"
+            style={{ color:"#111827", fontFamily:"'Playfair Display',serif" }}>Your Journeys</h1>
           <p className="text-base" style={{ color:"#6b7280" }}>Every adventure you've planned, beautifully organised.</p>
         </div>
 
@@ -269,22 +427,26 @@ export default function Dashboard() {
         )}
 
         {!loading && trips.length > 0 && (
-          <div className="inline-flex items-center gap-1 p-1 rounded-2xl mb-7" style={{ background:"rgba(255,255,255,0.7)", border:"1px solid rgba(255,255,255,0.9)" }}>
+          <div className="inline-flex items-center gap-1 p-1 rounded-2xl mb-7"
+            style={{ background:"rgba(255,255,255,0.7)", border:"1px solid rgba(255,255,255,0.9)" }}>
             {[["all","All Trips"],["ai","AI Plans"],["manual","Manual"]].map(([val, label]) => (
               <button key={val} onClick={() => setFilter(val)}
                 className="px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200"
-                style={filter === val ? { background:"linear-gradient(135deg,#f59e0b,#ef4444)", color:"#fff", boxShadow:"0 2px 8px rgba(239,68,68,0.25)" } : { color:"#6b7280" }}>
-                {label}
-              </button>
+                style={filter === val
+                  ? { background:"linear-gradient(135deg,#f59e0b,#ef4444)", color:"#fff", boxShadow:"0 2px 8px rgba(239,68,68,0.25)" }
+                  : { color:"#6b7280" }
+                }>{label}</button>
             ))}
           </div>
         )}
 
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="rounded-3xl p-6 animate-pulse" style={{ background:"rgba(255,255,255,0.6)", height:240 }}>
-                <div className="flex gap-3"><div className="w-12 h-12 rounded-2xl" style={{ background:"#e5e7eb" }} /></div>
+            {[...Array(6)].map((_,i) => (
+              <div key={i} className="rounded-3xl p-6 animate-pulse" style={{ background:"rgba(255,255,255,0.6)", height:260 }}>
+                <div className="w-12 h-12 rounded-2xl mb-4" style={{ background:"#e5e7eb" }} />
+                <div className="h-4 rounded-full w-2/3 mb-3" style={{ background:"#e5e7eb" }} />
+                <div className="h-3 rounded-full w-1/2" style={{ background:"#f3f4f6" }} />
               </div>
             ))}
           </div>
@@ -294,7 +456,11 @@ export default function Dashboard() {
               ? <EmptyState onPlan={() => navigate("/")} />
               : filtered.map((trip, i) => (
                   <TripCard key={trip._id || i} trip={trip} index={i}
-                    onView={handleView} onDelete={handleDeleteClick} onShare={handleShare} />
+                    onView={handleView}
+                    onDelete={handleDeleteClick}
+                    onShare={handleShare}
+                    onEdit={t => setEditTrip(t)}   // ✅ open edit modal
+                  />
                 ))
             }
           </div>
@@ -305,7 +471,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* DELETE MODAL */}
+      {/* ── EDIT MODAL ── */}
+      {editTrip && (
+        <EditModal
+          trip={editTrip}
+          onClose={() => setEditTrip(null)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {/* ── DELETE CONFIRM MODAL ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100]">
           <div className="bg-white p-6 rounded-2xl w-[90%] max-w-sm shadow-2xl animate-scaleIn border border-gray-100">
@@ -319,7 +494,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* UNDO TOAST */}
+      {/* ── UNDO TOAST ── */}
       {showUndo && (
         <div className="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 z-[100] animate-slideUp border border-slate-700">
           <span className="text-sm font-medium">Trip deleted</span>
@@ -327,13 +502,24 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ✅ LINK COPIED TOAST */}
+      {/* ── LINK COPIED TOAST ── */}
       {showCopied && (
         <div className="fixed bottom-6 left-6 z-[100] animate-slideUp">
-          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border"
-            style={{ background:"linear-gradient(135deg,#f59e0b,#ef4444)", borderColor:"rgba(255,255,255,0.2)", color:"#fff" }}>
+          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl"
+            style={{ background:"linear-gradient(135deg,#f59e0b,#ef4444)", color:"#fff" }}>
             <span style={{ fontSize:"18px" }}>🔗</span>
             <span className="text-sm font-bold">Link copied to clipboard!</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── SAVED TOAST ── */}
+      {showSaved && (
+        <div className="fixed bottom-6 left-6 z-[100] animate-slideUp">
+          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl"
+            style={{ background:"linear-gradient(135deg,#10b981,#059669)", color:"#fff" }}>
+            <span style={{ fontSize:"18px" }}>💾</span>
+            <span className="text-sm font-bold">Trip updated successfully!</span>
           </div>
         </div>
       )}
