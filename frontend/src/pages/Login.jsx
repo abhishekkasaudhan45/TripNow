@@ -1,34 +1,44 @@
+// frontend/src/pages/Login.jsx
+// ✅ FIXED: Redirects based on user role — admin → /admin, user → /dashboard
+// ✅ FIXED: Saves to sessionStorage (consistent with ProtectedRoute reader)
+
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import api from "../lib/api";
 
 export default function Login() {
-  const navigate = useNavigate();
-  const [form, setForm]       = useState({ email: "", password: "" });
-  const [err, setErr]         = useState("");
-  const [loading, setLoading] = useState(false);
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const [form, setForm]         = useState({ email: "", password: "" });
+  const [err, setErr]           = useState("");
+  const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setErr(""); setLoading(true);
     try {
-      // ✅ Endpoint correct: /api/auth/login
-      const res = await api.post("/api/auth/login", form);
+      const res   = await api.post("/api/auth/login", form);
       const token = res.data?.data?.token || res.data?.token;
-      
+      const user  = res.data?.data?.user  || {};
+
       if (!token) throw new Error("No token received");
-      
-      // ✅ Save to sessionStorage
+
+      // Save to sessionStorage — ProtectedRoute reads both storages
       sessionStorage.setItem("token", token);
-      sessionStorage.setItem("user", JSON.stringify(res.data?.data?.user || {}));
-      
-      // 🔥 FIX: Navigate to /admin instead of /dashboard
-      navigate("/admin");
+      sessionStorage.setItem("user",  JSON.stringify(user));
+
+      // ✅ Role-based redirect: admin → /admin, everyone else → /dashboard (or where they came from)
+      const from = location.state?.from?.pathname;
+      if (user.role === "admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate(from && from !== "/login" ? from : "/dashboard", { replace: true });
+      }
     } catch (e) {
       setErr(e?.response?.data?.message || "Invalid email or password");
-    } finally { 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -43,7 +53,7 @@ export default function Login() {
         .btn-main:disabled { opacity:0.7; cursor:not-allowed; }
       `}</style>
 
-      {/* ── Left: Photo panel ── */}
+      {/* Left photo panel */}
       <div className="hidden md:flex flex-col justify-between" style={{ width:"44%", position:"relative", overflow:"hidden" }}>
         <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=900&q=85" alt=""
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />
@@ -62,13 +72,12 @@ export default function Login() {
         </div>
       </div>
 
-      {/* ── Right: Form ── */}
+      {/* Right form */}
       <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:"linear-gradient(160deg,#fff7ed 0%,#fef3c7 30%,#fce7f3 70%,#ede9fe 100%)", padding:"40px 24px", position:"relative" }}>
         <div style={{ position:"absolute", top:"-60px", right:"-60px", width:"280px", height:"280px", borderRadius:"50%", background:"radial-gradient(circle,rgba(251,191,36,0.28) 0%,transparent 70%)", filter:"blur(50px)", pointerEvents:"none" }} />
         <div style={{ position:"absolute", bottom:"-40px", left:"-40px", width:"240px", height:"240px", borderRadius:"50%", background:"radial-gradient(circle,rgba(167,139,250,0.22) 0%,transparent 70%)", filter:"blur(50px)", pointerEvents:"none" }} />
 
         <div style={{ position:"relative", width:"100%", maxWidth:"400px" }}>
-          {/* Mobile logo */}
           <div className="md:hidden" style={{ textAlign:"center", marginBottom:"32px" }}>
             <Link to="/" style={{ display:"inline-flex", alignItems:"center", gap:"8px", textDecoration:"none" }}>
               <div style={{ width:"34px", height:"34px", borderRadius:"11px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"15px", color:"#fff" }}>✦</div>
@@ -90,7 +99,6 @@ export default function Login() {
           )}
 
           <form onSubmit={handleSubmit} style={{ display:"flex", flexDirection:"column", gap:"15px" }}>
-            {/* Email */}
             <div>
               <label style={{ fontSize:"11px", fontWeight:700, color:"#374151", textTransform:"uppercase", letterSpacing:"0.1em", display:"block", marginBottom:"6px" }}>Email address</label>
               <input className="inp" type="email" placeholder="you@example.com" value={form.email} required
@@ -98,7 +106,6 @@ export default function Login() {
                 style={{ width:"100%", padding:"12px 15px", borderRadius:"13px", border:"1.5px solid rgba(0,0,0,0.10)", background:"rgba(255,255,255,0.82)", fontSize:"14px", color:"#111827", fontFamily:"'DM Sans',sans-serif", boxSizing:"border-box" }} />
             </div>
 
-            {/* Password */}
             <div>
               <label style={{ fontSize:"11px", fontWeight:700, color:"#374151", textTransform:"uppercase", letterSpacing:"0.1em", display:"block", marginBottom:"6px" }}>Password</label>
               <div style={{ position:"relative" }}>

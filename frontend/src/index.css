@@ -39,3 +39,9 @@ body {
   to   { transform: scale(1);    opacity: 1; }
 }
 .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+html,
+body,
+#root {
+  overflow-x: hidden;
+  width: 100%;
+}

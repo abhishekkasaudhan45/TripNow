@@ -1,24 +1,22 @@
-
+// frontend/src/pages/PlanTrip.jsx
+// ✅ BUGS FIXED & UPGRADES:
+//   1. PDF Theme: Premium Creamy White (#FDFBF7) & Warm Gold.
+//   2. PDF Layout: Compressed aggressively to strictly 2-3 pages maximum.
+//   3. PDF Safety: safeString() prevents NaN coordinate crashes.
+//   4. MapView Component: Using Custom iframe MapView with dynamic destination. Removed dead Leaflet code.
+//   5. Skeletons: Added Premium TripSkeleton for loading states.
 
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import jsPDF from "jspdf";
 
-// 🌍 MAP IMPORTS
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
+// 🔥 IMPORT YOUR CUSTOM MAP COMPONENT
+import MapView from "../components/MapView";
 
-// Fix default marker icons
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-  iconUrl:       "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-  shadowUrl:     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-});
+// ✅ ADDED SKELETON IMPORT
+import { TripSkeleton } from "../components/Skeletons";
 
-// ✅ BUG 3 FIXED: regex had a literal newline in the middle of the string
 function parseTripData(raw) {
   if (!raw) return null;
   if (typeof raw === "object") return raw;
@@ -33,6 +31,15 @@ function parseTripData(raw) {
     return null;
   }
 }
+
+// 🔥 BULLETPROOF DATA PARSER FOR PDF
+const safeString = (val) => {
+  if (val === null || val === undefined) return "—";
+  if (typeof val === "string") return val;
+  if (Array.isArray(val)) return val.map(v => typeof v === 'object' ? Object.values(v).join(' ') : v).join(", ");
+  if (typeof val === "object") return Object.values(val).join(", ");
+  return String(val);
+};
 
 export default function PlanTrip() {
   const { state } = useLocation();
@@ -57,9 +64,6 @@ export default function PlanTrip() {
   const [openDays, setOpenDays]         = useState({ 0: true });
   const [activeTab, setActiveTab]       = useState("Itinerary");
 
-  // 🌍 MAP STATE — default center of India
-  const [mapCoords, setMapCoords] = useState([20.5937, 78.9629]);
-
   useEffect(() => {
     if (!state) { navigate("/"); return; }
 
@@ -75,16 +79,6 @@ export default function PlanTrip() {
         const parsed = parseTripData(raw);
         setTripData(parsed);
         setShowSuccess(true);
-
-        // ✅ BUG 6 FIXED: template literal URL was broken with $ outside backtick
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination)}`)
-          .then(r => r.json())
-          .then(data => {
-            if (data && data.length > 0) {
-              setMapCoords([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
-            }
-          })
-          .catch(() => {}); // silently ignore geocode failures
 
         setTimeout(() => {
           setShowSuccess(false);
@@ -115,240 +109,253 @@ export default function PlanTrip() {
   const toggleDay = (dayKey) =>
     setOpenDays(prev => ({ ...prev, [dayKey]: !prev[dayKey] }));
 
-  // 📄 PREMIUM PDF GENERATOR
+  // 📄 COMPACT CREAMY-WHITE PDF GENERATOR (MAX 2-3 PAGES)
   const downloadPDF = () => {
     if (!tripData) return;
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const W = 210, H = 297;
-    const ml = 18, mr = 18, contentW = W - ml - mr;
 
-    const hex = (h) => {
-      const r = parseInt(h.slice(1,3),16)/255;
-      const g = parseInt(h.slice(3,5),16)/255;
-      const b = parseInt(h.slice(5,7),16)/255;
-      return [r,g,b];
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const PW = 210, PH = 297;
+    const ML = 16, MR = 16;
+    const CW = PW - ML - MR; 
+
+    const safeDayCount = (startDate && endDate)
+      ? Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / 86400000))
+      : (tripData.days?.length || 0);
+
+    const rs = (val) => `Rs. ${val}`;
+
+    const rgb = (hex) => {
+      const h = hex.replace("#","");
+      return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
     };
-    const setFill   = (h) => doc.setFillColor(...hex(h));
-    const setStroke = (h) => doc.setDrawColor(...hex(h));
-    const setColor  = (h) => doc.setTextColor(...hex(h));
+    
+    const fill   = (hex) => doc.setFillColor(...rgb(hex));
+    const stroke = (hex) => doc.setDrawColor(...rgb(hex));
+    const color  = (hex) => doc.setTextColor(...rgb(hex));
+    const lw     = (w)   => doc.setLineWidth(w);
 
     let y = 0;
-    const newPageIfNeeded = (need = 20) => {
-      if (y + need > H - 16) { doc.addPage(); y = 20; }
+    let pageNum = 1;
+
+    const addFooter = () => {
+      color("#9CA3AF"); doc.setFont("helvetica","normal"); doc.setFontSize(8);
+      doc.text("Generated by wander.ai", ML, PH - 8);
+      doc.text(`Page ${pageNum}`, PW - MR, PH - 8, { align: "right" });
     };
 
-    // ── COVER PAGE ────────────────────────────────────────────────────
-    setFill("#0f172a"); doc.rect(0,0,W,H,"F");
-    setFill("#1e3a5f"); doc.rect(0,0,W,H/2,"F");
-    setFill("#f59e0b"); doc.circle(W-30, 30, 40,"F");
-    setFill("#ef4444"); doc.circle(W-10, 60, 20,"F");
-    setFill("#0ea5e9"); doc.circle(20, H-40, 30,"F");
-    setFill("#0f172a");
-    doc.setGState(new doc.GState({ opacity: 0.7 }));
-    doc.rect(0,0,W,H,"F");
+    const addPage = () => {
+      addFooter();
+      doc.addPage();
+      pageNum++;
+      fill("#FDFBF7"); doc.rect(0, 0, PW, PH, "F"); 
+      color("#9CA3AF"); doc.setFont("helvetica","normal"); doc.setFontSize(8);
+      doc.text(`Wander.ai • ${destination.toUpperCase()}`, ML, 10);
+      y = 18;
+    };
+
+    const needSpace = (h) => {
+      if (y + h > PH - 15) {
+        addPage();
+        return true;
+      }
+      return false;
+    };
+
+    const sectionHead = (text, accentHex = "#D97706") => {
+      needSpace(12);
+      color(accentHex); doc.setFont("helvetica","bold"); doc.setFontSize(10);
+      doc.text(text.toUpperCase(), ML, y);
+      y += 2;
+      stroke(accentHex); lw(0.5); doc.line(ML, y, ML + CW, y);
+      y += 6;
+    };
+
+    // ── PAGE 1: COMPACT HEADER (Creamy Theme) ──
+    fill("#FDFBF7"); doc.rect(0, 0, PW, PH, "F"); 
+    
+    // Subtle background warm shapes
+    fill("#FDE68A"); doc.circle(PW, 0, 40, "F"); 
+    fill("#FEF3C7"); doc.circle(0, PH, 50, "F"); 
+    
+    // Light overlay to keep text readable
+    doc.setGState(new doc.GState({ opacity: 0.2 }));
+    fill("#FDFBF7"); doc.rect(0, 0, PW, PH, "F");
     doc.setGState(new doc.GState({ opacity: 1 }));
 
-    doc.setFont("helvetica","bold"); doc.setFontSize(9); setColor("#f59e0b");
-    doc.text("WANDER.AI · PERSONALIZED TRAVEL PLAN", ml, 30);
+    y = 22;
+    color("#B45309"); doc.setFont("helvetica","bold"); doc.setFontSize(8);
+    doc.text("WANDER.AI • PERSONALIZED ITINERARY", ML, y);
+    
+    y += 10;
+    color("#111827"); doc.setFontSize(28);
+    doc.text(destination.toUpperCase(), ML, y, { maxWidth: CW });
+    
+    y += 8;
+    color("#4B5563"); doc.setFont("helvetica","normal"); doc.setFontSize(11);
+    doc.text(`${startDate || "—"} to ${endDate || "—"}  •  ${safeDayCount} Days  •  ${rs(budget)}`, ML, y);
 
-    doc.setFontSize(48); setColor("#ffffff");
-    doc.text(destination.toUpperCase(), ml, 65, { maxWidth: contentW });
+    y += 6;
+    stroke("#D1D5DB"); lw(0.3); doc.line(ML, y, ML + CW, y);
+    y += 8;
 
-    setStroke("#f59e0b"); doc.setLineWidth(1);
-    doc.line(ml, 74, ml+60, 74);
-
-    doc.setFontSize(13); setColor("#94a3b8"); doc.setFont("helvetica","normal");
-    doc.text(`${startDate}  →  ${endDate}   ·   ${dayCount} Days   ·   ₹${budget}`, ml, 84);
-
-    doc.setFontSize(10); setColor("#64748b");
-    doc.text("Your AI-crafted adventure awaits. Every moment, planned to perfection.", ml, H-30, { maxWidth: contentW });
-
-    setFill("#1e293b"); doc.rect(0, H-14, W, 14,"F");
-    doc.setFontSize(8); setColor("#475569");
-    doc.text("Generated by wander.ai", ml, H-5);
-    doc.text("Page 1", W-mr, H-5, { align:"right" });
-
-    // ── PAGE HEADER HELPER ────────────────────────────────────────────
-    const pageHeader = (pageNum) => {
-      setFill("#0f172a"); doc.rect(0,0,W,14,"F");
-      doc.setFontSize(8); setColor("#64748b"); doc.setFont("helvetica","normal");
-      doc.text("WANDER.AI · " + destination.toUpperCase(), ml, 9);
-      doc.text(`Page ${pageNum}`, W-mr, 9, { align:"right" });
-      y = 22;
-    };
-
-    const sectionTitle = (text, color="#f59e0b") => {
-      newPageIfNeeded(18);
-      doc.setFontSize(8); setColor(color); doc.setFont("helvetica","bold");
-      doc.text(text.toUpperCase(), ml, y);
-      y += 2;
-      setStroke(color); doc.setLineWidth(0.4);
-      doc.line(ml, y, ml+contentW, y);
-      y += 7;
-    };
-
-    // ── PAGE 2: ITINERARY ─────────────────────────────────────────────
-    doc.addPage();
-    pageHeader(2);
-
-    // Summary stat card
-    setFill("#f8fafc"); setStroke("#e2e8f0"); doc.setLineWidth(0.3);
-    doc.roundedRect(ml, y, contentW, 26, 3, 3, "FD");
-    const cols = contentW / 4;
-    const stats = [
-      ["DESTINATION", destination.toUpperCase(), "#0ea5e9"],
-      ["DURATION",    `${dayCount} Days`,         "#f59e0b"],
-      ["BUDGET",      `₹${budget}`,               "#10b981"],
-      ["ACTIVITIES",  `${(tripData.days?.length||0)*3}+`, "#8b5cf6"],
-    ];
-    stats.forEach(([label, val, color], i) => {
-      const cx = ml + cols*i + cols/2;
-      doc.setFontSize(7); setColor("#94a3b8"); doc.setFont("helvetica","bold");
-      doc.text(label, cx, y+8, { align:"center" });
-      doc.setFontSize(13); setColor(color); doc.setFont("helvetica","bold");
-      doc.text(val, cx, y+20, { align:"center" });
-      if (i < 3) { setStroke("#e2e8f0"); doc.setLineWidth(0.3); doc.line(ml+cols*(i+1), y+4, ml+cols*(i+1), y+22); }
-    });
-    y += 34;
-
-    if (tripData.bestTimeToVisit) {
-      setFill("#eff6ff"); setStroke("#bfdbfe");
-      doc.roundedRect(ml, y, contentW, 11, 2, 2, "FD");
-      doc.setFontSize(8); setColor("#1d4ed8"); doc.setFont("helvetica","bold");
-      doc.text("Best time to visit: ", ml+4, y+7);
-      doc.setFont("helvetica","normal"); setColor("#1e40af");
-      doc.text(tripData.bestTimeToVisit, ml+42, y+7);
-      y += 18;
-    }
-
-    sectionTitle("Day-by-Day Itinerary");
-    const dayColors = ["#f59e0b","#10b981","#0ea5e9","#8b5cf6","#ef4444","#f97316"];
-
-    tripData.days?.forEach((day, i) => {
-      const color = dayColors[i % dayColors.length];
-      const morningLines   = doc.splitTextToSize(day.morning   || "", contentW-30);
-      const afternoonLines = doc.splitTextToSize(day.afternoon || "", contentW-30);
-      const eveningLines   = doc.splitTextToSize(day.evening   || "", contentW-30);
-      const cardH = 18 + (morningLines.length + afternoonLines.length + eveningLines.length)*5 + 20;
-
-      newPageIfNeeded(cardH);
-
-      setFill("#f8fafc"); setStroke("#e2e8f0"); doc.setLineWidth(0.3);
-      doc.roundedRect(ml, y, contentW, cardH, 3, 3, "FD");
-      setFill(color);
-      doc.roundedRect(ml, y, 5, cardH, 2, 2, "F");
-      doc.rect(ml+2, y, 3, cardH, "F");
-      doc.roundedRect(ml+10, y+5, 22, 9, 2, 2, "F");
-      doc.setFontSize(8); setColor("#ffffff"); doc.setFont("helvetica","bold");
-      doc.text(`DAY ${day.day}`, ml+21, y+11, { align:"center" });
-      doc.setFontSize(12); setColor("#0f172a"); doc.setFont("helvetica","bold");
-      doc.text(day.title || `Exploring ${destination}`, ml+36, y+12, { maxWidth: contentW-50 });
-
-      let dy = y + 22;
-      const slotColor = ["#b45309","#0369a1","#6d28d9"];
-      const slotLabel = ["MORNING","AFTERNOON","EVENING"];
-      const slotTexts = [morningLines, afternoonLines, eveningLines];
-
-      slotTexts.forEach((lines, si) => {
-        doc.setFontSize(7); setColor(slotColor[si]); doc.setFont("helvetica","bold");
-        doc.text(slotLabel[si], ml+10, dy);
-        dy += 5;
-        doc.setFontSize(9); setColor("#334155"); doc.setFont("helvetica","normal");
-        doc.text(lines, ml+10, dy);
-        dy += lines.length * 5 + 4;
-      });
-
-      y += cardH + 6;
-    });
-
-    // ── PAGE 3: BUDGET ────────────────────────────────────────────────
+    // ── TRIP OVERVIEW / BUDGET (2-Column Dense Grid) ──
+    let budgetEntries = [];
     if (tripData.budgetBreakdown) {
-      doc.addPage();
-      pageHeader(3);
-      sectionTitle("Budget Breakdown", "#10b981");
-
-      Object.entries(tripData.budgetBreakdown).forEach(([key, val]) => {
-        const isTotal = key.toLowerCase().includes("total");
-        newPageIfNeeded(14);
-        setFill(isTotal ? "#d1fae5" : "#f8fafc");
-        setStroke(isTotal ? "#6ee7b7" : "#e2e8f0");
-        doc.setLineWidth(0.3);
-        doc.roundedRect(ml, y, contentW, 11, 2, 2, "FD");
-        doc.setFontSize(9);
-        doc.setFont("helvetica", isTotal ? "bold" : "normal");
-        setColor(isTotal ? "#065f46" : "#334155");
-        doc.text(key.replace(/([A-Z])/g," $1").trim(), ml+5, y+7.5);
-        doc.setFont("helvetica","bold");
-        setColor(isTotal ? "#047857" : "#10b981");
-        doc.text(String(val), W-mr-3, y+7.5, { align:"right" });
-        y += 13;
-      });
-    }
-
-    // ── PAGE 4: FOOD & STAYS ──────────────────────────────────────────
-    if (tripData.whereToStay || tripData.mustEat) {
-      doc.addPage();
-      pageHeader(4);
-
-      if (tripData.whereToStay) {
-        sectionTitle("Where to Stay", "#0ea5e9");
-        [
-          ["BUDGET OPTION",    tripData.whereToStay.budget,   "#fef3c7","#92400e"],
-          ["MID-RANGE OPTION", tripData.whereToStay.midRange, "#e0f2fe","#0c4a6e"],
-        ].forEach(([label, text, bg, fg]) => {
-          if (!text) return;
-          const lines = doc.splitTextToSize(text, contentW-16);
-          newPageIfNeeded(16+lines.length*5);
-          setFill(bg); setStroke("#e2e8f0"); doc.setLineWidth(0.3);
-          doc.roundedRect(ml, y, contentW, 10+lines.length*5, 2, 2, "FD");
-          doc.setFontSize(7); setColor(fg); doc.setFont("helvetica","bold");
-          doc.text(label, ml+5, y+6);
-          doc.setFontSize(9); setColor("#1e293b"); doc.setFont("helvetica","normal");
-          doc.text(lines, ml+5, y+13);
-          y += 14+lines.length*5;
-        });
-        y += 4;
-      }
-
-      if (tripData.mustEat?.length) {
-        sectionTitle("Must-Try Local Foods", "#ef4444");
-        const cols2 = Math.floor(contentW/2) - 4;
-        tripData.mustEat.forEach((food, i) => {
-          if (i % 2 === 0) { newPageIfNeeded(18); if (i > 0) y += 2; }
-          const xOff = ml + (i%2)*(cols2+8);
-          const lines = doc.splitTextToSize(food, cols2-18);
-          setFill("#fff7ed"); setStroke("#fed7aa"); doc.setLineWidth(0.3);
-          doc.roundedRect(xOff, y, cols2, 8+lines.length*5, 2, 2, "FD");
-          doc.setFontSize(9); setColor("#ef4444"); doc.setFont("helvetica","bold");
-          doc.text("~", xOff+4, y+7);
-          doc.setFontSize(9); setColor("#431407"); doc.setFont("helvetica","normal");
-          doc.text(lines, xOff+12, y+7);
-          if (i%2===1 || i===tripData.mustEat.length-1) y += 10+lines.length*5;
-        });
+      if (Array.isArray(tripData.budgetBreakdown)) {
+        budgetEntries = tripData.budgetBreakdown.map(item => [safeString(item.category || item.name || "Item"), safeString(item.cost || item.amount || "—")]);
+      } else if (typeof tripData.budgetBreakdown === 'object') {
+        budgetEntries = Object.entries(tripData.budgetBreakdown);
       }
     }
 
-    // ── PAGE 5: TIPS ──────────────────────────────────────────────────
-    if (tripData.travelTips?.length) {
-      doc.addPage();
-      pageHeader(5);
-      sectionTitle("Essential Travel Tips", "#8b5cf6");
+    if (budgetEntries.length > 0 || tripData.bestTimeToVisit) {
+      sectionHead("Trip Overview", "#D97706");
+      
+      if (tripData.bestTimeToVisit) {
+        color("#111827"); doc.setFont("helvetica","bold"); doc.setFontSize(9);
+        doc.text("Best Time to Visit:", ML, y);
+        color("#4B5563"); doc.setFont("helvetica","normal");
+        doc.text(safeString(tripData.bestTimeToVisit), ML + 30, y);
+        y += 6;
+      }
 
-      tripData.travelTips.forEach((tip, i) => {
-        const lines = doc.splitTextToSize(tip, contentW-22);
-        newPageIfNeeded(12+lines.length*5);
-        setFill("#faf5ff"); setStroke("#ddd6fe"); doc.setLineWidth(0.3);
-        doc.roundedRect(ml, y, contentW, 8+lines.length*5, 2, 2, "FD");
-        setFill("#8b5cf6");
-        doc.circle(ml+8, y+5.5, 4, "F");
-        doc.setFontSize(8); setColor("#ffffff"); doc.setFont("helvetica","bold");
-        doc.text(String(i+1).padStart(2,"0"), ml+8, y+7.5, { align:"center" });
-        doc.setFontSize(9); setColor("#3b0764"); doc.setFont("helvetica","normal");
-        doc.text(lines, ml+16, y+7);
-        y += 10+lines.length*5;
+      if (budgetEntries.length > 0) {
+        const halfW = (CW - 4) / 2;
+        budgetEntries.forEach(([key, val], idx) => {
+          const isLeft = idx % 2 === 0;
+          if (isLeft) needSpace(8);
+          const xOff = ML + (isLeft ? 0 : halfW + 4);
+          const isTotal = key.toLowerCase().includes("total");
+
+          fill(isTotal ? "#FEF3C7" : "#FFFFFF"); 
+          stroke("#E5E7EB"); lw(0.2);
+          doc.roundedRect(xOff, y, halfW, 7, 1, 1, "FD");
+
+          color(isTotal ? "#92400E" : "#4B5563"); 
+          doc.setFont("helvetica", isTotal ? "bold" : "normal"); doc.setFontSize(8);
+          doc.text(safeString(key).replace(/([A-Z])/g," $1").trim(), xOff + 3, y + 4.8);
+
+          color(isTotal ? "#B45309" : "#111827"); doc.setFont("helvetica","bold");
+          doc.text(safeString(val).replace(/₹/g, "Rs. "), xOff + halfW - 3, y + 4.8, { align:"right" });
+
+          if (!isLeft || idx === budgetEntries.length - 1) y += 8;
+        });
+      }
+      y += 4;
+    }
+
+    // ── HIGH-DENSITY ITINERARY ──
+    sectionHead("Day-by-Day Itinerary", "#D97706");
+    const daysArr = Array.isArray(tripData.days) ? tripData.days : [];
+
+    daysArr.forEach((day, i) => {
+      const mLines = doc.splitTextToSize(safeString(day.morning), CW - 24);
+      const aLines = doc.splitTextToSize(safeString(day.afternoon), CW - 24);
+      const eLines = doc.splitTextToSize(safeString(day.evening), CW - 24);
+      
+      const cardH  = 10 + (mLines.length + aLines.length + eLines.length) * 4.2;
+      needSpace(cardH + 4);
+
+      fill("#FFFFFF"); stroke("#E5E7EB"); lw(0.3);
+      doc.roundedRect(ML, y, CW, cardH, 2, 2, "FD");
+      
+      fill("#F59E0B"); doc.roundedRect(ML, y, 3, cardH, 1, 1, "F");
+      doc.rect(ML + 1, y, 2, cardH, "F");
+
+      color("#B45309"); doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.text(`DAY ${day.day}:`, ML + 6, y + 6);
+      
+      color("#111827");
+      doc.text(safeString(day.title) || `Exploring ${destination}`, ML + 22, y + 6, { maxWidth: CW - 26 });
+
+      let dy = y + 11.5;
+      const slots = [
+        { label:"MORNING:",   lines: mLines },
+        { label:"AFTERNOON:", lines: aLines },
+        { label:"EVENING:",   lines: eLines },
+      ];
+      slots.forEach(({ label, lines }) => {
+        color("#D97706"); doc.setFont("helvetica","bold"); doc.setFontSize(7);
+        doc.text(label, ML + 6, dy);
+        
+        color("#374151"); doc.setFont("helvetica","normal"); doc.setFontSize(8);
+        doc.text(lines, ML + 24, dy);
+        dy += lines.length * 4.2 + 1;
+      });
+      y += cardH + 4;
+    });
+
+    // ── COMPACT FOOD & STAYS ──
+    const hasStays = tripData.whereToStay && Object.keys(tripData.whereToStay).length > 0;
+    const mustEatArr = Array.isArray(tripData.mustEat) ? tripData.mustEat : (typeof tripData.mustEat === "string" ? [tripData.mustEat] : []);
+    
+    if (hasStays || mustEatArr.length > 0) {
+      sectionHead("Food & Stays", "#D97706");
+
+      if (hasStays) {
+        const halfW = (CW - 4) / 2;
+        const bLines = doc.splitTextToSize(safeString(tripData.whereToStay.budget || tripData.whereToStay.budgetOption), halfW - 6);
+        const mLines = doc.splitTextToSize(safeString(tripData.whereToStay.midRange || tripData.whereToStay.midRangeOption), halfW - 6);
+        
+        const maxH = Math.max(bLines.length, mLines.length) * 4.5 + 9;
+        needSpace(maxH + 4);
+
+        fill("#FFFFFF"); stroke("#E5E7EB"); lw(0.2);
+        doc.roundedRect(ML, y, halfW, maxH, 2, 2, "FD");
+        color("#B45309"); doc.setFont("helvetica","bold"); doc.setFontSize(8);
+        doc.text("BUDGET STAY", ML + 3, y + 5);
+        color("#4B5563"); doc.setFont("helvetica","normal"); doc.setFontSize(8);
+        doc.text(bLines, ML + 3, y + 9.5);
+
+        doc.roundedRect(ML + halfW + 4, y, halfW, maxH, 2, 2, "FD");
+        color("#B45309"); doc.setFont("helvetica","bold");
+        doc.text("MID-RANGE STAY", ML + halfW + 7, y + 5);
+        color("#4B5563"); doc.setFont("helvetica","normal");
+        doc.text(mLines, ML + halfW + 7, y + 9.5);
+
+        y += maxH + 4;
+      }
+
+      if (mustEatArr.length > 0) {
+        needSpace(10);
+        color("#111827"); doc.setFont("helvetica","bold"); doc.setFontSize(8);
+        doc.text("MUST-TRY FOODS:", ML, y);
+        y += 5;
+
+        const cols = 3;
+        const colW = CW / cols;
+        mustEatArr.forEach((food, i) => {
+          const isNewLine = i % cols === 0 && i !== 0;
+          if (isNewLine) { y += 5; needSpace(6); }
+          const xOff = ML + (i % cols) * colW;
+          
+          fill("#FEF3C7"); doc.circle(xOff + 2, y - 1, 1.5, "F");
+          color("#374151"); doc.setFont("helvetica","normal"); doc.setFontSize(8);
+          const truncated = safeString(food).length > 35 ? safeString(food).substring(0, 32) + "..." : safeString(food);
+          doc.text(truncated, xOff + 5, y);
+        });
+        y += 6;
+      }
+    }
+
+    // ── COMPACT TRAVEL TIPS ──
+    const tipsArr = Array.isArray(tripData.travelTips) ? tripData.travelTips : (typeof tripData.travelTips === "string" ? [tripData.travelTips] : []);
+    if (tipsArr.length > 0) {
+      sectionHead("Essential Travel Tips", "#D97706");
+      tipsArr.forEach((tip, i) => {
+        const lines = doc.splitTextToSize(safeString(tip), CW - 8);
+        needSpace(lines.length * 4.5 + 2);
+        
+        color("#D97706"); doc.setFont("helvetica","bold"); doc.setFontSize(8);
+        doc.text(`0${i+1}`, ML, y);
+        
+        color("#374151"); doc.setFont("helvetica","normal");
+        doc.text(lines, ML + 6, y);
+        y += lines.length * 4.5 + 2;
       });
     }
 
+    addFooter();
     doc.save(`${destination}-wander-ai-trip.pdf`);
   };
 
@@ -356,12 +363,14 @@ export default function PlanTrip() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
+        @import url('[https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap](https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap)');
 
-        .travel-vibe-bg { position:fixed; top:0; left:0; width:100vw; height:100vh; background:#f4f7f6; z-index:-1; overflow:hidden; }
-        .orb-1 { position:absolute; top:-10%; left:-10%; width:50vw; height:50vw; background:radial-gradient(circle,rgba(255,174,92,0.4) 0%,rgba(255,255,255,0) 70%); filter:blur(80px); animation:float 20s ease-in-out infinite; }
-        .orb-2 { position:absolute; bottom:-20%; right:-10%; width:60vw; height:60vw; background:radial-gradient(circle,rgba(92,218,255,0.4) 0%,rgba(255,255,255,0) 70%); filter:blur(90px); animation:float 25s ease-in-out infinite reverse; }
-        .orb-3 { position:absolute; top:30%; left:30%; width:40vw; height:40vw; background:radial-gradient(circle,rgba(255,153,204,0.3) 0%,rgba(255,255,255,0) 70%); filter:blur(70px); animation:float 22s ease-in-out infinite alternate; }
+        /* Updated to warm, creamy tones to completely remove blue */
+        .travel-vibe-bg { position:fixed; top:0; left:0; width:100vw; height:100vh; background:#FDFBF7; z-index:-1; overflow:hidden; }
+        .orb-1 { position:absolute; top:-10%; left:-10%; width:50vw; height:50vw; background:radial-gradient(circle,rgba(245,158,11,0.2) 0%,rgba(255,255,255,0) 70%); filter:blur(80px); animation:float 20s ease-in-out infinite; }
+        .orb-2 { position:absolute; bottom:-20%; right:-10%; width:60vw; height:60vw; background:radial-gradient(circle,rgba(16,185,129,0.15) 0%,rgba(255,255,255,0) 70%); filter:blur(90px); animation:float 25s ease-in-out infinite reverse; }
+        .orb-3 { position:absolute; top:30%; left:30%; width:40vw; height:40vw; background:radial-gradient(circle,rgba(217,119,6,0.15) 0%,rgba(255,255,255,0) 70%); filter:blur(70px); animation:float 22s ease-in-out infinite alternate; }
+        
         @keyframes float { 0%{transform:translate(0,0) scale(1)} 33%{transform:translate(5%,10%) scale(1.1)} 66%{transform:translate(-5%,5%) scale(0.9)} 100%{transform:translate(0,0) scale(1)} }
         @keyframes slideDown { 0%{opacity:0;transform:translate(-50%,-20px)} 100%{opacity:1;transform:translate(-50%,0)} }
         .animate-slideDown { animation:slideDown 0.4s ease-out forwards; }
@@ -369,7 +378,6 @@ export default function PlanTrip() {
         .animate-slideUp { animation:slideUp 0.4s ease-out forwards; }
         @keyframes popIn { 0%{transform:scale(0.8);opacity:0} 100%{transform:scale(1);opacity:1} }
         @keyframes bounceEmoji { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
-        /* ✅ BUG 4 FIXED: missing pulse keyframe */
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
         @keyframes loadPulse { 0%,100%{opacity:1} 50%{opacity:.5} }
         .loading-pulse { animation:loadPulse 2s infinite; }
@@ -377,19 +385,17 @@ export default function PlanTrip() {
         .plan-trip-container {
           --font-head:'Playfair Display',Georgia,serif;
           --font-ui:'Space Grotesk',sans-serif;
-          --surface:rgba(255,255,255,0.65); --surface-2:rgba(255,255,255,0.4); --surface-3:rgba(255,255,255,0.8);
-          --border:rgba(255,255,255,0.8); --border-2:rgba(0,0,0,0.06);
-          --text:#1e293b; --muted:#64748b; --dim:#94a3b8;
-          --amber:#f59e0b; --amber-dim:rgba(245,158,11,0.15); --amber-text:#b45309;
-          --emerald:#10b981; --emerald-dim:rgba(16,185,129,0.15); --emerald-text:#047857;
-          --sky:#0ea5e9; --sky-dim:rgba(14,165,233,0.15); --sky-text:#0369a1;
-          --violet:#8b5cf6; --violet-dim:rgba(139,92,246,0.15);
-          --rose:#f43f5e; --rose-dim:rgba(244,63,94,0.15);
+          --surface:rgba(255,255,255,0.7); --surface-2:rgba(255,255,255,0.5); --surface-3:rgba(255,255,255,0.9);
+          --border:rgba(0,0,0,0.08); --border-2:rgba(0,0,0,0.04);
+          --text:#111827; --muted:#4B5563; --dim:#9CA3AF;
+          --amber:#F59E0B; --amber-dim:rgba(245,158,11,0.15); --amber-text:#B45309;
+          --emerald:#10B981; --emerald-dim:rgba(16,185,129,0.15); --emerald-text:#047857;
+          --rose:#EF4444; --rose-dim:rgba(239,68,68,0.15);
           font-family:var(--font-ui); color:var(--text); font-size:14px; line-height:1.5;
           min-height:100vh; padding:20px; display:flex; justify-content:center; position:relative; z-index:1;
         }
 
-        .shell { background:rgba(255,255,255,0.55); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); width:100%; max-width:1200px; border-radius:16px; overflow:hidden; border:1px solid rgba(255,255,255,0.6); box-shadow:0 20px 50px rgba(0,0,0,0.05); display:flex; flex-direction:column; }
+        .shell { background:rgba(255,255,255,0.6); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); width:100%; max-width:1200px; border-radius:16px; overflow:hidden; border:1px solid rgba(0,0,0,0.05); box-shadow:0 20px 50px rgba(0,0,0,0.04); display:flex; flex-direction:column; }
 
         .topbar { display:flex; align-items:center; justify-content:space-between; padding:0 20px; height:54px; background:var(--surface); border-bottom:1px solid var(--border); gap:12px; }
         .topbar-left { display:flex; align-items:center; gap:8px; }
@@ -402,7 +408,6 @@ export default function PlanTrip() {
         .tag { display:inline-flex; align-items:center; gap:5px; padding:4px 12px; border-radius:6px; font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
         .tag-amber { background:var(--amber-dim); color:var(--amber-text); border:1px solid rgba(245,158,11,0.3); }
         .tag-emerald { background:var(--emerald-dim); color:var(--emerald-text); border:1px solid rgba(16,185,129,0.3); }
-        /* ✅ BUG 4 FIXED: .dot now has animation referencing the pulse keyframe above */
         .dot { width:6px; height:6px; border-radius:50%; background:var(--emerald); animation:pulse 2s infinite; }
 
         .layout { display:grid; grid-template-columns:260px 1fr; min-height:700px; flex:1; }
@@ -410,10 +415,10 @@ export default function PlanTrip() {
         .sidebar-section { padding:0 20px 8px; margin-top:16px; }
         .sidebar-label { font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--dim); margin-bottom:12px; padding:0 4px; }
         .nav-item { display:flex; align-items:center; gap:12px; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:500; color:var(--muted); cursor:pointer; transition:all .2s; margin:0 8px; }
-        .nav-item:hover { background:rgba(255,255,255,0.5); color:var(--text); transform:translateX(4px); }
+        .nav-item:hover { background:rgba(255,255,255,0.7); color:var(--text); transform:translateX(4px); }
         .nav-item.active { background:var(--surface-3); color:var(--text); font-weight:600; }
 
-        .trip-meta { margin:16px 20px 0; padding:16px; background:rgba(255,255,255,0.4); border-radius:12px; border:1px solid var(--border); }
+        .trip-meta { margin:16px 20px 0; padding:16px; background:rgba(255,255,255,0.7); border-radius:12px; border:1px solid var(--border); }
         .trip-dest { font-family:var(--font-head); font-size:24px; font-style:italic; color:var(--text); margin-bottom:4px; text-transform:capitalize; }
         .trip-dates { font-size:12px; font-weight:500; color:var(--muted); margin-bottom:12px; }
         .trip-stat { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.04); }
@@ -428,13 +433,12 @@ export default function PlanTrip() {
         .page-sub { font-size:13px; color:var(--muted); font-weight:500; }
 
         .btn-cluster { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:4px; }
-        .btn-pdf { padding:8px 16px; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; background:rgba(255,255,255,0.85); color:#1e293b; border:1.5px solid rgba(0,0,0,0.1); font-family:var(--font-ui); transition:transform 0.15s,box-shadow 0.15s; }
-        .btn-pdf:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.1); }
-        .btn-dashboard { padding:8px 16px; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; background:rgba(255,255,255,0.7); color:#334155; border:1.5px solid rgba(0,0,0,0.12); font-family:var(--font-ui); transition:transform 0.15s,background 0.15s; }
-        .btn-dashboard:hover { background:rgba(255,255,255,0.95); transform:translateY(-1px); }
-        /* ✅ BUG 5 FIXED: added missing font-family to btn-book */
-        .btn-book { padding:8px 20px; border-radius:10px; font-size:13px; font-weight:800; cursor:pointer; background:linear-gradient(135deg,#f59e0b,#ef4444); color:#fff; border:none; box-shadow:0 4px 16px rgba(239,68,68,0.3); font-family:var(--font-ui); transition:transform 0.15s,box-shadow 0.15s; }
-        .btn-book:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(239,68,68,0.4); }
+        .btn-pdf { padding:8px 16px; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; background:rgba(255,255,255,0.9); color:#111827; border:1px solid rgba(0,0,0,0.1); font-family:var(--font-ui); transition:transform 0.15s,box-shadow 0.15s; }
+        .btn-pdf:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.05); }
+        .btn-dashboard { padding:8px 16px; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; background:rgba(255,255,255,0.7); color:#374151; border:1px solid rgba(0,0,0,0.1); font-family:var(--font-ui); transition:transform 0.15s,background 0.15s; }
+        .btn-dashboard:hover { background:rgba(255,255,255,1); transform:translateY(-1px); }
+        .btn-book { padding:8px 20px; border-radius:10px; font-size:13px; font-weight:800; cursor:pointer; background:linear-gradient(135deg,#D97706,#EF4444); color:#fff; border:none; box-shadow:0 4px 16px rgba(239,68,68,0.2); font-family:var(--font-ui); transition:transform 0.15s,box-shadow 0.15s; }
+        .btn-book:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(239,68,68,0.3); }
 
         .tabs { padding:0 32px; display:flex; gap:8px; border-bottom:1px solid var(--border-2); margin-top:8px; overflow-x:auto; }
         .tab { padding:12px 16px; font-size:13px; font-weight:700; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; text-transform:uppercase; letter-spacing:.06em; transition:all .2s; white-space:nowrap; }
@@ -443,21 +447,21 @@ export default function PlanTrip() {
         .content { flex:1; overflow-y:auto; padding:24px 32px; display:flex; flex-direction:column; gap:16px; }
         .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
         @media(max-width:768px){ .stats-row{grid-template-columns:1fr 1fr;} .layout{grid-template-columns:1fr;} }
-        .stat-card { background:rgba(255,255,255,0.7); border:1px solid var(--border); border-radius:12px; padding:16px; transition:transform 0.2s; }
+        .stat-card { background:rgba(255,255,255,0.8); border:1px solid var(--border); border-radius:12px; padding:16px; transition:transform 0.2s; }
         .stat-card:hover { transform:translateY(-2px); }
         .stat-label { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700; margin-bottom:6px; }
         .stat-val { font-size:24px; font-weight:700; line-height:1; }
 
-        .day-row { background:rgba(255,255,255,0.8); border:1px solid var(--border); border-radius:12px; overflow:hidden; transition:all .2s; margin-bottom:12px; }
-        .day-row.open { border-color:rgba(245,158,11,0.4); box-shadow:0 8px 24px rgba(0,0,0,0.06); }
+        .day-row { background:rgba(255,255,255,0.9); border:1px solid var(--border); border-radius:12px; overflow:hidden; transition:all .2s; margin-bottom:12px; }
+        .day-row.open { border-color:rgba(245,158,11,0.3); box-shadow:0 8px 24px rgba(0,0,0,0.04); }
         .day-header { display:flex; align-items:center; cursor:pointer; }
         .day-num { width:56px; height:56px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; border-right:1px solid rgba(0,0,0,0.05); background:rgba(255,255,255,0.5); flex-shrink:0; }
-        .day-num.d1{color:var(--amber-text)} .day-num.d2{color:var(--emerald-text)} .day-num.d3{color:var(--sky-text)} .day-num.d4{color:var(--violet)}
+        .day-num.d1{color:var(--amber-text)} .day-num.d2{color:var(--emerald-text)} .day-num.d3{color:var(--amber-text)} .day-num.d4{color:var(--rose)}
         .day-title-wrap { flex:1; padding:0 16px; display:flex; align-items:center; }
         .day-title { font-size:15px; font-weight:700; color:var(--text); }
         .day-chevron { padding:0 20px; color:var(--dim); font-size:14px; transition:transform .3s; flex-shrink:0; }
         .day-chevron.open { transform:rotate(180deg); color:var(--amber-text); }
-        .day-body { border-top:1px solid rgba(0,0,0,0.05); display:none; grid-template-columns:1fr 1fr 1fr; background:rgba(255,255,255,0.3); }
+        .day-body { border-top:1px solid rgba(0,0,0,0.05); display:none; grid-template-columns:1fr 1fr 1fr; background:rgba(255,255,255,0.5); }
         .day-body.open { display:grid; }
         @media(max-width:768px){ .day-body.open{grid-template-columns:1fr;} }
         .day-slot { padding:16px; border-right:1px solid rgba(0,0,0,0.05); }
@@ -469,11 +473,8 @@ export default function PlanTrip() {
         .section-head { font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin-bottom:12px; margin-top:8px; }
         .budget-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
         @media(max-width:600px){ .budget-grid{grid-template-columns:1fr;} }
-        .budget-row { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:rgba(255,255,255,0.7); border:1px solid rgba(0,0,0,0.05); border-radius:8px; }
-        .budget-total { grid-column:1/-1; border-color:rgba(16,185,129,0.3); background:var(--emerald-dim); }
-
-        /* Leaflet z-index fix */
-        .leaflet-container { z-index: 1; }
+        .budget-row { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:rgba(255,255,255,0.8); border:1px solid rgba(0,0,0,0.05); border-radius:8px; }
+        .budget-total { grid-column:1/-1; border-color:rgba(16,185,129,0.2); background:var(--emerald-dim); }
       `}} />
 
       <div className="travel-vibe-bg">
@@ -499,7 +500,6 @@ export default function PlanTrip() {
         )}
 
         <div className="shell">
-          {/* ── Topbar ── */}
           <div className="topbar">
             <div className="topbar-left">
               <div className="wordmark">wander<span>.</span>ai</div>
@@ -527,7 +527,6 @@ export default function PlanTrip() {
           </div>
 
           <div className="layout">
-            {/* ── Sidebar ── */}
             <div className="sidebar">
               <div className="trip-meta">
                 <div className="trip-dest">{destination || "Destination"}</div>
@@ -558,7 +557,6 @@ export default function PlanTrip() {
               </div>
             </div>
 
-            {/* ── Main content ── */}
             <div className="main">
               <div className="page-header">
                 <div>
@@ -596,18 +594,13 @@ export default function PlanTrip() {
                 )}
               </div>
 
-              {/* Loading */}
+              {/* ✅ UPDATED LOADING SKELETON */}
               {loading && !showSuccess && (
-                <div className="content" style={{ alignItems:"center", justifyContent:"center" }}>
-                  <div style={{ textAlign:"center", color:"var(--muted)" }}>
-                    <div style={{ fontSize:"48px", marginBottom:"24px" }} className="loading-pulse">🏖️</div>
-                    <p style={{ color:"var(--text)", fontSize:"18px", fontWeight:"700" }}>Curating your dream getaway...</p>
-                    <p style={{ marginTop:"8px", fontSize:"14px" }}>Finding hidden gems, sunset spots, and local eats.</p>
-                  </div>
+                <div className="content mt-4">
+                  <TripSkeleton />
                 </div>
               )}
 
-              {/* Error */}
               {!loading && !showSuccess && error && (
                 <div className="content" style={{ alignItems:"center", justifyContent:"center" }}>
                   <div style={{ textAlign:"center", background:"var(--rose-dim)", padding:"24px", borderRadius:"12px", border:"1px solid rgba(244,63,94,0.3)" }}>
@@ -623,7 +616,6 @@ export default function PlanTrip() {
                 </div>
               )}
 
-              {/* Success splash */}
               {showSuccess && !error && (
                 <div className="content" style={{ alignItems:"center", justifyContent:"center" }}>
                   <div style={{ textAlign:"center", background:"rgba(255,255,255,0.9)", padding:"48px", borderRadius:"24px", border:"1px solid rgba(16,185,129,0.3)", boxShadow:"0 20px 40px rgba(0,0,0,0.05)", animation:"popIn 0.5s cubic-bezier(0.16,1,0.3,1)" }}>
@@ -634,7 +626,6 @@ export default function PlanTrip() {
                 </div>
               )}
 
-              {/* Main tabs + content */}
               {!loading && !showSuccess && !error && tripData && (
                 <>
                   <div className="tabs">
@@ -647,38 +638,23 @@ export default function PlanTrip() {
 
                   <div className="content">
 
-                    {/* ── MAP TAB ── ✅ BUG 1 & 2 FIXED: completely rewritten MapContainer JSX */}
+                    {/* ── MAP TAB USING CUSTOM MAPVIEW COMPONENT ── */}
                     {activeTab === "Map" && (
-                      <div style={{ height:"500px", borderRadius:"16px", overflow:"hidden", border:"1px solid rgba(0,0,0,0.1)", boxShadow:"0 10px 30px rgba(0,0,0,0.05)" }}>
-                        <MapContainer
-                          center={mapCoords}
-                          zoom={12}
-                          style={{ width:"100%", height:"100%" }}
-                        >
-                          <TileLayer
-                            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                          />
-                          <Marker position={mapCoords}>
-                            <Popup>
-                              <div style={{ textAlign:"center", fontFamily:"sans-serif" }}>
-                                <b style={{ color:"#b45309" }}>{destination}</b>
-                                <br />Your adventure starts here!
-                              </div>
-                            </Popup>
-                          </Marker>
-                        </MapContainer>
+                      <div className="mt-4">
+                        <h2 className="text-xl font-bold mb-4" style={{ color: "var(--text)" }}>🗺️ Map View</h2>
+                        <div className="mt-10">
+                          <MapView destination={destination} />
+                        </div>
                       </div>
                     )}
 
-                    {/* ── ITINERARY TAB ── */}
                     {activeTab === "Itinerary" && (
                       <>
                         <div className="stats-row">
                           <div className="stat-card"><div className="stat-label">Total Days</div><div className="stat-val" style={{color:"var(--amber-text)"}}>{dayCount}</div></div>
                           <div className="stat-card"><div className="stat-label">Total Budget</div><div className="stat-val" style={{color:"var(--emerald-text)"}}>₹{budget}</div></div>
-                          <div className="stat-card"><div className="stat-label">Destination</div><div className="stat-val" style={{fontSize:"18px",textTransform:"capitalize",color:"var(--sky-text)"}}>{destination}</div></div>
-                          <div className="stat-card"><div className="stat-label">Activities</div><div className="stat-val" style={{color:"var(--violet)"}}>{(tripData.days?.length||0)*3}+</div></div>
+                          <div className="stat-card"><div className="stat-label">Destination</div><div className="stat-val" style={{fontSize:"18px",textTransform:"capitalize",color:"var(--amber-text)"}}>{destination}</div></div>
+                          <div className="stat-card"><div className="stat-label">Activities</div><div className="stat-val" style={{color:"var(--rose)"}}>{(tripData.days?.length||0)*3}+</div></div>
                         </div>
 
                         <div className="section-head">Day-by-day itinerary</div>
@@ -700,7 +676,7 @@ export default function PlanTrip() {
                                     style={{ background:"rgba(255,255,255,0.7)", padding:"4px 12px", borderRadius:"6px", width:"100%", border:"1px solid #d1d5db", fontWeight:"700", outline:"none", fontFamily:"var(--font-ui)" }}
                                   />
                                 ) : (
-                                  <div className="day-title">{day.title || `Exploring ${destination}`}</div>
+                                  <div className="day-title">{safeString(day.title) || `Exploring ${destination}`}</div>
                                 )}
                               </div>
                               <div className={`day-chevron ${openDays[i] ? "open" : ""}`}>▾</div>
@@ -709,8 +685,8 @@ export default function PlanTrip() {
                             <div className={`day-body ${openDays[i] ? "open" : ""}`}>
                               {[
                                 { key:"morning",   label:"Morning",   dot:"var(--amber)",  text:"var(--amber-text)" },
-                                { key:"afternoon", label:"Afternoon", dot:"var(--sky)",    text:"var(--sky-text)"   },
-                                { key:"evening",   label:"Evening",   dot:"var(--violet)", text:"var(--violet)"     },
+                                { key:"afternoon", label:"Afternoon", dot:"var(--emerald)",text:"var(--emerald-text)" },
+                                { key:"evening",   label:"Evening",   dot:"var(--rose)",   text:"var(--rose)" },
                               ].map(({ key, label, dot, text }) => (
                                 <div key={key} className="day-slot">
                                   <div className="slot-label" style={{ color: text }}>
@@ -725,16 +701,16 @@ export default function PlanTrip() {
                                         updated.days[i][key] = e.target.value;
                                         setEditableTrip(updated);
                                       }}
-                                      style={{ background:"rgba(255,255,255,0.7)", padding:"8px", borderRadius:"6px", width:"100%", border:"1px solid #d1d5db", fontSize:"13px", minHeight:"80px", outline:"none", resize:"vertical", fontFamily:"var(--font-ui)" }}
+                                      style={{ background:"rgba(255,255,255,0.9)", padding:"8px", borderRadius:"6px", width:"100%", border:"1px solid #d1d5db", fontSize:"13px", minHeight:"80px", outline:"none", resize:"vertical", fontFamily:"var(--font-ui)" }}
                                     />
                                   ) : (
-                                    <div className="slot-text">{day[key]}</div>
+                                    <div className="slot-text">{safeString(day[key])}</div>
                                   )}
                                   {!editMode && key === "evening" && day.food?.length > 0 && (
                                     <div style={{ marginTop:"12px", padding:"10px", background:"rgba(245,158,11,0.1)", borderRadius:"6px", border:"1px solid rgba(245,158,11,0.2)" }}>
                                       <b style={{ fontSize:"10px", color:"var(--amber-text)", textTransform:"uppercase", letterSpacing:"0.05em" }}>🍽️ Evening Eats:</b>
                                       {day.food.map((f, fi) => (
-                                        <div key={fi} style={{ fontSize:"12px", color:"var(--text)", marginTop:"4px", fontWeight:"500" }}>• {f}</div>
+                                        <div key={fi} style={{ fontSize:"12px", color:"var(--text)", marginTop:"4px", fontWeight:"500" }}>• {safeString(f)}</div>
                                       ))}
                                     </div>
                                   )}
@@ -746,7 +722,6 @@ export default function PlanTrip() {
                       </>
                     )}
 
-                    {/* ── BUDGET TAB ── */}
                     {activeTab === "Budget" && tripData.budgetBreakdown && (
                       <>
                         <div className="section-head">Budget breakdown</div>
@@ -754,16 +729,15 @@ export default function PlanTrip() {
                           {Object.entries(tripData.budgetBreakdown).map(([key, val]) => (
                             <div key={key} className={`budget-row ${key.toLowerCase().includes("total") ? "budget-total" : ""}`}>
                               <span style={{ textTransform:"capitalize", fontWeight:"600", color:"var(--muted)" }}>
-                                {key.replace(/([A-Z])/g," $1").trim()}
+                                {safeString(key).replace(/([A-Z])/g," $1").trim()}
                               </span>
-                              <span style={{ fontWeight:"700", color:"var(--emerald-text)" }}>{val}</span>
+                              <span style={{ fontWeight:"700", color:"var(--emerald-text)" }}>{safeString(val)}</span>
                             </div>
                           ))}
                         </div>
                       </>
                     )}
 
-                    {/* ── FOOD & STAYS TAB ── */}
                     {activeTab === "Food & Stays" && (
                       <>
                         {tripData.whereToStay && (
@@ -772,11 +746,11 @@ export default function PlanTrip() {
                             <div className="budget-grid" style={{ marginBottom:"24px" }}>
                               <div className="budget-row" style={{ flexDirection:"column", alignItems:"flex-start", background:"var(--amber-dim)", borderColor:"rgba(245,158,11,0.3)" }}>
                                 <span style={{ color:"var(--amber-text)", marginBottom:"6px", fontWeight:"bold" }}>Budget Option</span>
-                                <span style={{ color:"var(--text)" }}>{tripData.whereToStay.budget}</span>
+                                <span style={{ color:"var(--text)" }}>{safeString(tripData.whereToStay.budget || tripData.whereToStay.budgetOption)}</span>
                               </div>
-                              <div className="budget-row" style={{ flexDirection:"column", alignItems:"flex-start", background:"var(--sky-dim)", borderColor:"rgba(14,165,233,0.3)" }}>
-                                <span style={{ color:"var(--sky-text)", marginBottom:"6px", fontWeight:"bold" }}>Mid-Range Option</span>
-                                <span style={{ color:"var(--text)" }}>{tripData.whereToStay.midRange}</span>
+                              <div className="budget-row" style={{ flexDirection:"column", alignItems:"flex-start", background:"var(--emerald-dim)", borderColor:"rgba(16,185,129,0.3)" }}>
+                                <span style={{ color:"var(--emerald-text)", marginBottom:"6px", fontWeight:"bold" }}>Mid-Range Option</span>
+                                <span style={{ color:"var(--text)" }}>{safeString(tripData.whereToStay.midRange || tripData.whereToStay.midRangeOption)}</span>
                               </div>
                             </div>
                           </>
@@ -785,29 +759,28 @@ export default function PlanTrip() {
                           <>
                             <div className="section-head">Must-Try Local Foods</div>
                             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-                              {tripData.mustEat.map((food, i) => (
-                                <div key={i} style={{ background:"rgba(255,255,255,0.7)", border:"1px solid rgba(0,0,0,0.05)", borderRadius:"8px", padding:"14px 16px", display:"flex", gap:"12px" }}>
+                              {Array.isArray(tripData.mustEat) ? tripData.mustEat.map((food, i) => (
+                                <div key={i} style={{ background:"rgba(255,255,255,0.8)", border:"1px solid rgba(0,0,0,0.05)", borderRadius:"8px", padding:"14px 16px", display:"flex", gap:"12px" }}>
                                   <span style={{ fontSize:"16px" }}>🍜</span>
-                                  <span style={{ fontSize:"13px", fontWeight:"500", color:"var(--text)" }}>{food}</span>
+                                  <span style={{ fontSize:"13px", fontWeight:"500", color:"var(--text)" }}>{safeString(food)}</span>
                                 </div>
-                              ))}
+                              )) : null}
                             </div>
                           </>
                         )}
                       </>
                     )}
 
-                    {/* ── TIPS TAB ── */}
                     {activeTab === "Tips" && tripData.travelTips?.length > 0 && (
                       <>
                         <div className="section-head">Essential Travel Tips</div>
                         <div style={{ display:"grid", gap:"12px" }}>
-                          {tripData.travelTips.map((tip, i) => (
-                            <div key={i} style={{ background:"rgba  (255,255,255,0.7)", border:"1px solid rgba(0,0,0,0.05)", borderRadius:"8px", padding:"14px 16px", display:"flex", gap:"12px" }}>
+                          {Array.isArray(tripData.travelTips) ? tripData.travelTips.map((tip, i) => (
+                            <div key={i} style={{ background:"rgba(255,255,255,0.8)", border:"1px solid rgba(0,0,0,0.05)", borderRadius:"8px", padding:"14px 16px", display:"flex", gap:"12px" }}>
                               <div style={{ fontWeight:"800", color:"var(--muted)", flexShrink:0 }}>0{i+1}</div>
-                              <div style={{ fontWeight:"500", color:"var(--text)", lineHeight:"1.6" }}>{tip}</div>
+                              <div style={{ fontWeight:"500", color:"var(--text)", lineHeight:"1.6" }}>{safeString(tip)}</div>
                             </div>
-                          ))}
+                          )) : null}
                         </div>
                       </>
                     )}

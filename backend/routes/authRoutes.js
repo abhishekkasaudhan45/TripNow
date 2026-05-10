@@ -1,9 +1,19 @@
 const express = require("express");
-const { signup, login } = require("../controllers/authController");
-
 const router = express.Router();
+const protect = require("../middleware/auth");
+const {
+  signup,
+  login,
+  getMe,
+} = require("../controllers/authController");
 
+// --- Public Routes ---
+// These do not require a token
 router.post("/signup", signup);
-router.post("/login", login); // Replaced "loginAdmin" with general "login"
+router.post("/login", login);
+
+// --- Private Routes ---
+// This requires a valid Bearer token in the header
+router.get("/me", protect, getMe);
 
 module.exports = router;

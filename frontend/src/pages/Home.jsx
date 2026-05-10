@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+// ✅ IMPORT OPTIMIZED IMAGE
+import OptimizedImage from "../components/OptimizedImage";
 
+// ✅ CLEANED URLS: Removed manual "?w=..." queries so OptimizedImage can handle it
 const DESTINATIONS = [
   {
     name: "Manali",
@@ -8,7 +11,7 @@ const DESTINATIONS = [
     desc: "Snowy peaks, river valleys & thrilling sports",
     emoji: "🏔️",
     price: "₹18,000",
-    img: "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=600&q=80",
+    img: "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23",
   },
   {
     name: "Goa",
@@ -16,7 +19,7 @@ const DESTINATIONS = [
     desc: "Sun-kissed beaches, nightlife & fresh seafood",
     emoji: "🏖️",
     price: "₹22,000",
-    img: "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=600&q=80",
+    img: "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2",
   },
   {
     name: "Jaipur",
@@ -24,8 +27,7 @@ const DESTINATIONS = [
     desc: "Royal palaces, forts & Rajasthani cuisine",
     emoji: "🏯",
     price: "₹15,000",
-    // ✅ FIXED: new working Jaipur image URL
-    img: "https://images.unsplash.com/photo-1599661046289-e31897846e41?w=600&q=80",
+    img: "https://images.unsplash.com/photo-1599661046289-e31897846e41",
   },
   {
     name: "Kerala",
@@ -33,7 +35,7 @@ const DESTINATIONS = [
     desc: "Backwaters, spice gardens & Ayurveda retreats",
     emoji: "🌴",
     price: "₹20,000",
-    img: "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=600&q=80",
+    img: "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944",
   },
   {
     name: "Ladakh",
@@ -41,7 +43,7 @@ const DESTINATIONS = [
     desc: "High-altitude lakes, monasteries & starry skies",
     emoji: "⛰️",
     price: "₹28,000",
-    img: "https://images.unsplash.com/photo-1506038634487-60a69ae4b7b1?w=600&q=80",
+    img: "https://images.unsplash.com/photo-1506038634487-60a69ae4b7b1",
   },
   {
     name: "Rishikesh",
@@ -49,7 +51,7 @@ const DESTINATIONS = [
     desc: "Yoga, white-water rafting & sacred ghats",
     emoji: "🕉️",
     price: "₹12,000",
-    img: "https://images.unsplash.com/photo-1593693397690-362cb9666fc2?w=600&q=80",
+    img: "https://images.unsplash.com/photo-1593693397690-362cb9666fc2",
   },
 ];
 
@@ -74,7 +76,6 @@ export default function Home() {
   const [form, setForm] = useState({ destination: "", checkin: "", checkout: "", budget: "" });
   const [err, setErr]   = useState("");
 
-  // ── Main form submit ──────────────────────────────────────────────────
   function handleSubmit(e) {
     e.preventDefault();
     if (!form.destination || !form.checkin || !form.checkout || !form.budget) {
@@ -84,15 +85,12 @@ export default function Home() {
     navigate("/plan-trip", { state: form });
   }
 
-  // ✅ FIXED: quickPlan uses `dest` parameter correctly
-  // Opens the plan-trip page with just the destination pre-filled;
-  // user can fill dates & budget there (or we send sensible defaults)
   function quickPlan(dest) {
     navigate("/plan-trip", {
       state: {
-        destination: dest,        // ✅ uses the passed-in destination name
-        budget: "15000",          // sensible default
-        checkin:  "",             // user will fill on plan page or AI handles it
+        destination: dest,
+        budget: "15000",
+        checkin:  "",
         checkout: "",
       },
     });
@@ -117,8 +115,15 @@ export default function Home() {
       {/* ── HERO ── */}
       <div style={{ position:"relative", overflow:"hidden", minHeight:"92vh" }}>
         <div style={{ position:"absolute", inset:0 }}>
-          <img src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1600&q=85" alt=""
-            style={{ width:"100%", height:"100%", objectFit:"cover", opacity:0.28 }} />
+          {/* ✅ REPLACED HERO IMAGE WITH LCP-PRIORITY OPTIMIZED IMAGE */}
+          <OptimizedImage
+            src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429"
+            alt="Luxury Travel Background"
+            width={1920}
+            height={1080}
+            priority={true} // High priority for Hero image
+            className="w-full h-full object-cover opacity-[0.28]"
+          />
           <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg,rgba(255,247,237,0.93) 0%,rgba(254,243,199,0.86) 25%,rgba(253,232,216,0.82) 50%,rgba(252,231,243,0.78) 75%,rgba(237,233,254,0.86) 100%)" }} />
         </div>
 
@@ -129,14 +134,12 @@ export default function Home() {
         </div>
 
         <div style={{ position:"relative", maxWidth:"1100px", margin:"0 auto", padding:"140px 24px 80px" }}>
-          {/* AI badge */}
           <div className="fade-in" style={{ display:"flex", justifyContent:"center", marginBottom:"22px" }}>
             <span style={{ display:"inline-flex", alignItems:"center", gap:"8px", padding:"6px 18px", borderRadius:"999px", background:"rgba(255,255,255,0.75)", border:"1px solid rgba(245,158,11,0.35)", fontSize:"12px", fontWeight:700, color:"#b45309", letterSpacing:"0.1em", textTransform:"uppercase", backdropFilter:"blur(12px)" }}>
               ✦ AI-Powered Travel Planning
             </span>
           </div>
 
-          {/* Headline */}
           <div className="fade-in" style={{ textAlign:"center", marginBottom:"12px", animationDelay:"0.1s" }}>
             <h1 style={{ fontFamily:"'Playfair Display',serif", fontSize:"clamp(44px,7vw,88px)", fontWeight:900, lineHeight:1.05, color:"#111827", letterSpacing:"-2px", margin:0 }}>
               Plan Your<br />
@@ -149,7 +152,6 @@ export default function Home() {
             Describe where you want to go — AI builds your perfect itinerary instantly.
           </p>
 
-          {/* Search form */}
           <div className="fade-in" style={{ maxWidth:"860px", margin:"0 auto", animationDelay:"0.3s" }}>
             <form onSubmit={handleSubmit}>
               <div style={{ display:"grid", gridTemplateColumns:"1.6fr 1fr 1fr 1fr auto", gap:"12px", background:"rgba(255,255,255,0.84)", backdropFilter:"blur(20px)", padding:"20px", borderRadius:"24px", border:"1px solid rgba(255,255,255,0.95)", boxShadow:"0 8px 48px rgba(0,0,0,0.10)" }}>
@@ -182,7 +184,6 @@ export default function Home() {
             </form>
           </div>
 
-          {/* Quick destination pills */}
           <div className="fade-in" style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:"8px", marginTop:"20px", animationDelay:"0.4s" }}>
             <span style={{ fontSize:"12px", color:"#9ca3af", fontWeight:600, display:"flex", alignItems:"center" }}>Quick plan:</span>
             {["Goa","Manali","Jaipur","Ladakh","Kerala","Rishikesh"].map(d => (
@@ -233,28 +234,25 @@ export default function Home() {
             <div
               key={i}
               className="card-hover"
-              onClick={() => quickPlan(d.name)}   // ✅ calls fixed quickPlan
+              onClick={() => quickPlan(d.name)}
               style={{ borderRadius:"24px", overflow:"hidden", cursor:"pointer", position:"relative", boxShadow:"0 4px 24px rgba(0,0,0,0.10)" }}
             >
-              {/* Image */}
               <div style={{ position:"relative", height:"220px", overflow:"hidden" }}>
-                <img
+                {/* ✅ REPLACED INLINE CARD IMAGES WITH OPTIMIZED IMAGE */}
+                <OptimizedImage
                   src={d.img}
                   alt={d.name}
-                  style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", transition:"transform 0.4s ease" }}
-                  onError={e => { e.target.src = `https://source.unsplash.com/600x400/?${d.name},india,travel`; }}
+                  width={600}
+                  height={400}
+                  className="w-full h-full object-cover block transition-transform duration-500 ease-in-out"
                 />
-                {/* Gradient overlay */}
                 <div style={{ position:"absolute", inset:0, background: CARD_GRADIENTS[i] }} />
-                {/* Tag bubble */}
                 <div style={{ position:"absolute", top:"14px", left:"14px", padding:"4px 12px", borderRadius:"999px", background:"rgba(255,255,255,0.2)", backdropFilter:"blur(10px)", border:"1px solid rgba(255,255,255,0.4)", fontSize:"11px", fontWeight:700, color:"#fff", textTransform:"uppercase", letterSpacing:"0.08em" }}>
                   {d.tag}
                 </div>
-                {/* Price badge */}
                 <div style={{ position:"absolute", top:"14px", right:"14px", padding:"4px 12px", borderRadius:"999px", background:"rgba(0,0,0,0.35)", backdropFilter:"blur(10px)", fontSize:"12px", fontWeight:800, color:"#fff" }}>
                   {d.price}
                 </div>
-                {/* Destination name over image */}
                 <div style={{ position:"absolute", bottom:"14px", left:"18px" }}>
                   <p style={{ fontFamily:"'Playfair Display',serif", fontSize:"24px", fontWeight:900, color:"#fff", margin:0, lineHeight:1.1, textShadow:"0 2px 8px rgba(0,0,0,0.3)" }}>
                     {d.emoji} {d.name}
@@ -263,10 +261,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Card footer */}
               <div style={{ background:"rgba(255,255,255,0.92)", backdropFilter:"blur(12px)", padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                 <span style={{ fontSize:"12px", color:"#9ca3af", fontWeight:600 }}>Starting from {d.price}</span>
-                {/* ✅ Plan with AI button — properly stops propagation and calls quickPlan */}
                 <button
                   className="dest-plan-btn"
                   onClick={e => { e.stopPropagation(); quickPlan(d.name); }}
