@@ -8,9 +8,12 @@
     "backend:start": "npm --prefix backend run start"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-query-devtools": "^5.100.10",
     "axios": "^1.13.5",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
+    "compression": "^1.8.1",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
@@ -18,6 +21,7 @@
     "razorpay": "^2.9.6",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.13.0",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "vite-bundle-visualizer": "^1.2.1"
   }
 }
