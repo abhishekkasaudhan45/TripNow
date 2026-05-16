@@ -6,8 +6,7 @@ const adminRoutes     = require("./adminRoutes");
 const aiRoutes        = require("./aiRoutes");       
 const tripRoutes      = require("./tripRoutes");
 const bookingRoutes   = require("./bookingRoutes");
-const sharedTripRoute = require("./sharedTripRoute"); // ✅ NEW: Public shared route
-
+const sharedTripRoutes = require("./SharedTripRoute");
 const router = express.Router();
 
 // Root test
