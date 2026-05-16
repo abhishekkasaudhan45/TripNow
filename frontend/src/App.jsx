@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 
 // Layouts & Security (NOT lazy loaded so the shell loads instantly)
@@ -18,6 +18,14 @@ const SharedTrip = lazy(() => import("./pages/SharedTrip"));
 const NotFound   = lazy(() => import("./pages/NotFound"));
 
 function App() {
+
+  // 👉 ADDED THIS WAKE-UP FUNCTION HERE:
+  useEffect(() => {
+    fetch(import.meta.env.VITE_API_URL)
+      .then(() => console.log("Backend awoken!"))
+      .catch((err) => console.log("Waking backend...", err));
+  }, []);
+
   return (
     // 🛡️ ACCESSIBLE SUSPENSE WRAPPER (Creamy Theme Background)
     <Suspense
