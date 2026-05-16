@@ -17,8 +17,20 @@ app.use(securityHeaders);
 // CORS
 app.use(
   cors({
-    origin: "http://localhost:5173", // ✅ exact frontend URL
-    credentials: true,               // ✅ allow cookies
+    origin: function (origin, callback) {
+      const allowed = [
+        "http://localhost:5173",
+        process.env.CLIENT_URL, // ✅ This dynamically loads your Vercel URL from your .env later!
+      ].filter(Boolean);
+      
+      // Allow requests with no origin (like Postman or Render health checks)
+      if (!origin || allowed.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // ✅ allow cookies
   })
 );
 
