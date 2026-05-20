@@ -1,12 +1,10 @@
 import React, { Suspense, lazy, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 
-// Layouts & Security (NOT lazy loaded so the shell loads instantly)
 import MainLayout from "./layouts/MainLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PageSkeleton } from "./components/Skeletons";
 
-// 🚀 LAZY LOADED PAGES (Optimizes initial load time)
 const Home       = lazy(() => import("./pages/Home"));
 const Booking    = lazy(() => import("./pages/Booking"));
 const Admin      = lazy(() => import("./pages/Admin"));
@@ -19,15 +17,16 @@ const NotFound   = lazy(() => import("./pages/NotFound"));
 
 function App() {
 
-  // 👉 ADDED THIS WAKE-UP FUNCTION HERE:
   useEffect(() => {
-    fetch(import.meta.env.VITE_API_URL)
-      .then(() => console.log("Backend awoken!"))
-      .catch((err) => console.log("Waking backend...", err));
+    const url = import.meta.env.VITE_API_URL;
+    if (url) {
+      fetch(`${url}/api`)
+        .then(() => console.log("Backend awake ✅"))
+        .catch(() => console.log("Backend waking up..."));
+    }
   }, []);
 
   return (
-    // 🛡️ ACCESSIBLE SUSPENSE WRAPPER (Creamy Theme Background)
     <Suspense
       fallback={
         <main
@@ -41,33 +40,24 @@ function App() {
       }
     >
       <Routes>
-        {/* Public Shared Trip Route */}
         <Route path="/shared-trip/:id" element={<SharedTrip />} />
 
-        {/* ✅ ALL routes below wrapped in MainLayout → Header + Footer always visible */}
         <Route element={<MainLayout />}>
-
-          {/* Public pages */}
           <Route path="/"          element={<Home />} />
           <Route path="/login"     element={<Login />} />
           <Route path="/signup"    element={<Signup />} />
           <Route path="/booking"   element={<Booking />} />
-          
-          {/* AI trip planner */}
           <Route path="/plan-trip" element={<PlanTrip />} />
           <Route path="/trip/:id"  element={<PlanTrip />} />
 
-          {/* Dashboard — protected (Any logged in user) */}
           <Route path="/dashboard" element={
             <ProtectedRoute><Dashboard /></ProtectedRoute>
           } />
 
-          {/* ✅ Admin — protected (Strictly requireAdmin) */}
           <Route path="/admin" element={
             <ProtectedRoute requireAdmin={true}><Admin /></ProtectedRoute>
           } />
 
-          {/* 404 Not Found */}
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
