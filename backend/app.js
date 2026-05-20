@@ -12,21 +12,19 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(securityHeaders);
 
-// ✅ UPDATED CORS — includes all your frontend URLs
+// ✅ FINAL CORS — allows all Vercel preview URLs + custom domains
 app.use(
   cors({
     origin: function (origin, callback) {
-      const allowed = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://trip-now-rosy.vercel.app",      // your vercel URL
-        "https://tripnow.abhishektech.me",        // your custom subdomain
-        "https://abhishektech.me",                // root domain just in case
-        process.env.CLIENT_URL,                   // from Render env vars
-      ].filter(Boolean);
+      // Allow requests with no origin (Postman, Render health checks, curl)
+      if (!origin) return callback(null, true);
 
-      // Allow Postman, Render health checks, curl (no origin header)
-      if (!origin || allowed.includes(origin)) {
+      const isAllowed =
+        origin.includes("vercel.app") ||        // ✅ ALL Vercel preview + production URLs
+        origin.includes("abhishektech.me") ||   // ✅ your custom domain
+        origin.includes("localhost");            // ✅ local development
+
+      if (isAllowed) {
         callback(null, true);
       } else {
         console.warn("CORS blocked origin:", origin);
@@ -62,4 +60,4 @@ app.use("/api", apiRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-module.exports = app;
+module.exports = app; 
