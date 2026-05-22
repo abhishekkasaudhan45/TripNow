@@ -2,7 +2,7 @@
 
 An advanced, full-stack AI travel planning web application that generates personalized itineraries in seconds. Built with a sleek glassmorphic user interface, secure token-based authentication, and a robust backend architecture.
 
-🔗 **[Live Demo](https://abhishektech.me)** | 🛠️ **Status: Production Ready**
+🔗 **[Live Demo](https://tripnow.abhishektech.me)** | 🛠️ **Status: Production Ready**
 
 ---
 
