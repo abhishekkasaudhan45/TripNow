@@ -5,6 +5,12 @@ const isValidDate = (value) =>
 
 const bookingSchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
     destination: {
       type: String,
       required: [true, "Destination is required"],

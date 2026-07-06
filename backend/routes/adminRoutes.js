@@ -2,9 +2,13 @@ const express = require("express");
 const router = express.Router();
 
 const protect = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/requireAdmin");
+
 const { getBookings } = require("../controllers/bookingController");
 
-// ✅ FIX: create correct route
-router.get("/bookings", protect, getBookings);
+
+router.use(protect, requireAdmin);
+
+router.get("/bookings", getBookings);
 
 module.exports = router;

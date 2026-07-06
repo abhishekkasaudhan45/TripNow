@@ -1,19 +1,25 @@
 const express = require("express");
 const router = express.Router();
 const protect = require("../middleware/auth");
+const { authLimiter } = require("../middleware/rateLimiters");
+
+// 🛡️ Phase 2 Validation Additions
+const { validate } = require("../middleware/validate");
+const { signupSchema, loginSchema } = require("../validators/authValidators");
+
 const {
   signup,
   login,
   getMe,
 } = require("../controllers/authController");
 
-// --- Public Routes ---
-// These do not require a token
-router.post("/signup", signup);
-router.post("/login", login);
+// 🔐 Public Registration Route (Rate Limited → Data Validated → Account Created)
+router.post("/signup", authLimiter, validate(signupSchema), signup);
 
-// --- Private Routes ---
-// This requires a valid Bearer token in the header
+// 🔐 Public Login Route (Rate Limited → Credentials Validated → Token Issued)
+router.post("/login", authLimiter, validate(loginSchema), login);
+
+// 🔑 Private Route (Token Authenticated)
 router.get("/me", protect, getMe);
 
 module.exports = router;

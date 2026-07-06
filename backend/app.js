@@ -5,30 +5,32 @@ const compression = require("compression");
 const apiRoutes = require("./routes");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 const { securityHeaders } = require("./middleware/security");
+const { globalLimiter } = require("./middleware/rateLimiters");
 
 const app = express();
 
-app.disable("x-powered-by");
 app.set("trust proxy", 1);
+
+app.disable("x-powered-by");
 app.use(securityHeaders);
 
-// ✅ FINAL CORS — allows all Vercel preview URLs + custom domains
+// 🔒 STRICTOR CORS — Parsee comma-separated URLs from your environment variables
+const allowedOrigins = (process.env.CLIENT_URL || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (Postman, Render health checks, curl)
+    origin(origin, callback) {
+      // Allow non-browser tools (curl/Postman) and same-origin requests with no Origin header.
       if (!origin) return callback(null, true);
-
-      const isAllowed =
-        origin.includes("vercel.app") ||        // ✅ ALL Vercel preview + production URLs
-        origin.includes("abhishektech.me") ||   // ✅ your custom domain
-        origin.includes("localhost");            // ✅ local development
-
-      if (isAllowed) {
-        callback(null, true);
+      
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       } else {
-        console.warn("CORS blocked origin:", origin);
-        callback(new Error("Not allowed by CORS"));
+        console.warn("🔒 CORS blocked unauthorized origin:", origin);
+        return callback(new Error(`CORS: origin ${origin} not allowed`));
       }
     },
     credentials: true,
@@ -44,20 +46,20 @@ app.use(compression({
   },
 }));
 
-app.use(express.json());
-
+app.use(express.json({ limit: "10kb" }));
 app.get("/", (req, res) => {
   res.send("Travel API Running ✅");
 });
 
-// Health check — frontend uses this to wake up Render
 app.get("/api", (req, res) => {
   res.json({ message: "API working ✅", timestamp: new Date().toISOString() });
 });
+
+app.use("/api", globalLimiter);
 
 app.use("/api", apiRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
 
-module.exports = app; 
+module.exports = app;

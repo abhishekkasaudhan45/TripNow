@@ -35,8 +35,14 @@ const signup = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Signup Error:", error);
-    return res.status(500).json({ success: false, message: error.message || "Server Error during signup" });
+    // 🪵 Log full error detail server-side on Render/terminal
+    console.error("🔒 Signup Internal Error:", error);
+    
+    // 🛡️ Sanitized client-facing message (No internals leaked)
+    return res.status(500).json({ 
+      success: false, 
+      message: "Something went wrong. Please try again." 
+    });
   }
 };
 
@@ -66,8 +72,14 @@ const login = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Login Error:", error);
-    return res.status(500).json({ success: false, message: error.message || "Server Error during login" });
+    // 🪵 Log full error detail server-side on Render/terminal
+    console.error("🔒 Login Internal Error:", error);
+    
+    // 🛡️ Sanitized client-facing message (No internals leaked)
+    return res.status(500).json({ 
+      success: false, 
+      message: "Something went wrong. Please try again." 
+    });
   }
 };
 
@@ -94,8 +106,14 @@ const getMe = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("GetMe Error:", error);
-    return res.status(500).json({ success: false, message: "Server Error fetching user data" });
+    // 🪵 Log full error detail server-side on Render/terminal
+    console.error("🔒 GetMe Internal Error:", error);
+    
+    // 🛡️ Sanitized client-facing message (No internals leaked)
+    return res.status(500).json({ 
+      success: false, 
+      message: "Something went wrong. Please try again." 
+    });
   }
 };
 

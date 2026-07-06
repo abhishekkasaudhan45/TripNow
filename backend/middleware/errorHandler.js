@@ -45,9 +45,21 @@ const errorHandler = (error, req, res, next) => {
     });
   }
 
+  // 🔒 Secure fallback for unhandled exceptions (500 Internal Server Errors)
+  const statusCode = error.statusCode || 500;
+
+  // Always log the actual stack trace server-side so you can fix bugs using Render logs
+  if (statusCode === 500) {
+    console.error("🔒 Internal Server Error Intercepted:", error);
+  }
+
   return sendError(res, {
-    statusCode: error.statusCode || 500,
-    message: error.message || "Internal server error",
+    statusCode,
+    // If it's a 500 error in production, strip the raw error text and send a generic message
+    message: env.isProduction && statusCode === 500
+      ? "Something went wrong. Please try again."
+      : (error.message || "Internal server error"),
+    // Mask stack trace details when running live
     stack: env.isProduction ? undefined : error.stack,
   });
 };

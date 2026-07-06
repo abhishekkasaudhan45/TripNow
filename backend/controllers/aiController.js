@@ -1,17 +1,18 @@
 const axios = require("axios");
 const Booking = require("../models/Booking");
+const env = require("../config/env");
 
 const generateAITrip = async (req, res) => {
   try {
     const { prompt, destination, budget, startDate, endDate } = req.body;
 
     if (!destination && !prompt) {
-      return res.status(400).json({ message: "Trip details are required" });
+      return res.status(400).json({ success: false, message: "Trip details are required" });
     }
 
     const API_KEY = process.env.GROQ_API_KEY;
     if (!API_KEY) {
-      return res.status(500).json({ message: "GROQ_API_KEY not set in backend/.env" });
+      return res.status(500).json({ success: false, message: "GROQ_API_KEY not set in backend/.env" });
     }
 
     const finalPrompt = prompt || `
@@ -89,11 +90,14 @@ Return ONLY valid JSON (no markdown, no backticks, no explanation):
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    // ✅ Links a trip to its owner when generated while logged in (null for guests)
     const savedTrip = await Booking.create({
+      user: req.user?._id || null, 
       destination: destination || "AI Generated",
       guests: 1,
       checkin: startDate ? new Date(startDate) : today,
       checkout: endDate ? new Date(endDate) : tomorrow,
+      budget: budget || null,
       aiPlan: text,
     });
 
@@ -101,10 +105,15 @@ Return ONLY valid JSON (no markdown, no backticks, no explanation):
 
   } catch (error) {
     const errDetail = error.response?.data?.error || error.message;
-    console.error("🔥 AI ERROR:", JSON.stringify(errDetail, null, 2));
+    
+    // 🪵 Log the explicit, unedited crash trace inside your Render console for debugging
+    console.error("🔒 AI Controller Internal Error:", JSON.stringify(errDetail, null, 2));
+    
+    // 🛡️ Send a uniform, clean message back to the frontend without leaking API errors
     res.status(500).json({
-      message: errDetail?.message || "AI generation failed",
-      error: errDetail,
+      success: false,
+      message: env.isProduction ? "AI itinerary generation failed. Please try again." : (errDetail?.message || "AI generation failed"),
+      ...(env.isProduction ? {} : { error: errDetail }),
     });
   }
 };
