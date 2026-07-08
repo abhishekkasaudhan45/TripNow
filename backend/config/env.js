@@ -38,5 +38,7 @@ module.exports = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "2h",
   adminPassword: process.env.ADMIN_PASSWORD,
   allowedOrigins: parseAllowedOrigins(),
+  // First allowed origin is treated as the canonical client URL for email links.
+  clientUrl: parseAllowedOrigins()[0] || "http://localhost:5173",
   isProduction: process.env.NODE_ENV === "production",
 };

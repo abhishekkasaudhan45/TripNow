@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const env = require("../config/env");
+const { issueVerificationEmail } = require("./passwordController");
 
 // 🔥 FIXED: Converted MongoDB ObjectId to a clean string
 const generateToken = (id, role) => {
@@ -24,6 +25,13 @@ const signup = async (req, res) => {
 
     // Create user in MongoDB
     const user = await User.create({ name, email, password });
+
+    // Best-effort verification email — never block signup if email fails.
+    try {
+      await issueVerificationEmail(user);
+    } catch (mailError) {
+      console.error("✉️  Verification email failed (non-blocking):", mailError.message);
+    }
 
     // Generate Token safely
     const token = generateToken(user._id, user.role);

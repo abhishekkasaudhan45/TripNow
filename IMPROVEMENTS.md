@@ -37,34 +37,83 @@ Security & abuse holes that can cost money or leak data. Highest priority.
       set it from `req.user` when the requester is logged in.
 - [ ] **Structured logging** — replace scattered `console.log` with `pino` or `morgan`.
 
-## Phase 3 — 🟢 Clean up the repo
+## Phase 3 — 🟢 Clean up the repo ✅ DONE
 
-- [ ] **Delete dead / duplicate code:**
-  - `frontend/src/services/api.js` — hardcoded `localhost`, unused (pages import `lib/api.js`).
-  - `frontend/src/config/env.js` — hardcoded `apiUrl: "http://localhost:5000"`, misleading.
-  - `backend/services/aiService.js` — unused Gemini code; controller uses Groq inline.
-- [ ] **Remove committed log files** — `backend-dev.log`, `backend-dev.err.log`,
-      `frontend-dev.log`, `frontend-dev.err.log` from repo root; add `*.log` to root `.gitignore`.
-- [ ] **Add `backend/.env.example`** — mirror the frontend example so setup is reproducible.
-- [ ] **Fix README inaccuracies** — it claims "httpOnly cookies," but auth actually uses
-      Bearer tokens in `localStorage`. Update the docs to match reality (or change the impl).
+- [x] **Delete dead / duplicate code:**
+  - `frontend/src/services/api.js` — removed (dead chain via `services/aiService.js`).
+  - `frontend/src/services/aiService.js` — removed (unused `generateAI`).
+  - `frontend/src/config/env.js` — removed (hardcoded localhost, unused).
+  - `backend/services/aiService.js` — removed (unused Gemini code; controller uses Groq inline).
+  - Empty `frontend/src/config/` and `backend/services/` dirs removed.
+- [x] **Remove committed log files** — deleted the four root `*.log` files; added `*.log` to
+      root `.gitignore`.
+- [x] **Add `backend/.env.example`** — created, mirroring real required vars.
+- [x] **Fix README inaccuracies** — removed false "httpOnly cookies" claim; corrected the env
+      setup block (`MONGO_URI`, added `ADMIN_EMAIL`/`ADMIN_PASSWORD`) and pointed to `.env.example`.
 
-## Phase 4 — 🔐 Trust & user experience
+## Phase 4 — 🔐 Trust & user experience ✅ DONE
 
-- [ ] **Password reset** flow (email token).
-- [ ] **Email verification** on signup.
-- [ ] **Legal pages** — Privacy Policy + Terms (required once you store emails/passwords).
-- [ ] **API tests** — `jest` + `supertest` + `mongodb-memory-server` are already installed but
-      no tests exist. Cover auth, AI rate limit, and admin authorization.
+- [x] **API tests** — added `backend/tests/` (auth, validation, admin authorization, password
+      reset + verification); **18 tests** passing via `npm test`. Rate limiters + email sending
+      auto-skip under `NODE_ENV=test`.
+- [x] **Legal pages** — Privacy Policy (`/privacy`) + Terms (`/terms`), linked in footer.
+      _Templates tailored to TripNow — have them reviewed for your jurisdiction._
+- [x] **Password reset** — `POST /api/auth/forgot-password` + `/reset-password`. Tokens are
+      random 32-byte, stored only as SHA-256 hashes with a 1-hour expiry, single-use, and
+      `forgot-password` never reveals whether an email is registered. Frontend pages added.
+- [x] **Email verification** — verification email sent on signup (non-blocking);
+      `GET /api/auth/verify-email` + frontend page. 24-hour token.
+- [x] **Email delivery** — server-side via EmailJS REST using the **private key**, so raw
+      tokens never reach the browser. Config is optional (see `backend/.env.example`).
 - [ ] **Consider moving JWT to httpOnly cookies** — `localStorage` tokens are XSS-stealable.
+      _(Deferred — larger refactor; left for a future pass.)_
 
-## Phase 5 — 📈 Growth (after it's safe)
+> **⚙️ Action required to enable emails:** create an EmailJS account, add two templates using
+> the params `{{to_email}} {{user_name}} {{link}} {{subject}}`, then set the five `EMAILJS_*`
+> vars in `backend/.env`. Until then, the flows work but emails are skipped (logged as a warning).
 
-- [ ] SEO meta tags + Open Graph / Twitter cards for shareable links.
-- [ ] Basic analytics (Plausible / GA) + error monitoring (Sentry).
-- [ ] Better Render cold-start UX (the frontend already pings `/api` to wake it — surface a
-      friendly "warming up" state).
-- [ ] Roadmap features: PDF export (`jspdf` is already a dependency) + interactive map.
+## Phase 5 — 📈 Growth (in progress)
+
+- [x] **SEO + social meta** — real `<title>`, description, keywords, canonical, Open Graph, and
+      Twitter Card tags added to `frontend/index.html`. ⚠️ Add an `og-image.jpg` (1200×630) to
+      `frontend/public/` so link previews show an image (currently referenced but not present).
+- [x] **PDF lazy-loading** — jsPDF is now dynamically imported inside the export handler.
+      **PlanTrip chunk: 417 kB → 31 kB** (jsPDF only loads when "Download PDF" is clicked).
+- [x] **Cold-start UX** — a "Waking up the server…" banner appears only if the Render backend is
+      slow to respond on load, and disappears once it's awake (`frontend/src/App.jsx`).
+- [ ] **Analytics** — _deferred by choice._ Needs a provider (Plausible / GA4) + site key.
+- [ ] **Error monitoring (Sentry)** — _deferred by choice._ Needs a Sentry account + DSN.
+
+---
+
+## Phase 6 — 🎨 UI/UX audit + responsive (P0 + P1 done)
+
+### P0 — correctness & trust (done)
+- [x] **Admin link gated on role** — `Header.jsx` now checks `user.role === "admin"`, not just
+      a token, so normal users no longer see an Admin link that 403s.
+- [x] **"0 Days" bug fixed** — `PlanTrip.jsx` `dayCount` now falls back to the AI's returned
+      `days.length` when a quick-plan/featured trip has no dates.
+- [x] **Fake social proof removed** — CTA copy no longer claims "thousands of travellers."
+
+### P1 — responsive foundation (done, verified live at 375/768/1280)
+- [x] **Hero search responsive** — converted the fixed 5-col inline grid to Tailwind
+      (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-[...]`); stacks cleanly on mobile/tablet.
+- [x] **Header nav bug fixed** — an inline `display:flex` was overriding the `hidden md:flex`
+      class, so the desktop nav leaked onto mobile. Removed the inline override; nav now
+      collapses to the hamburger correctly.
+- [x] **Verified** Header, Hero, Why cards, Featured grid, CTA, Footer, PlanTrip shell, and
+      Login split-panel across mobile / tablet / desktop — no horizontal overflow anywhere.
+      Production build + lint green (one pre-existing `set-state-in-effect` warning in
+      `Header.jsx`, unrelated to this work).
+
+### Remaining (next rounds, per approved plan)
+- [ ] **P2 — hero redesign** ("refined centered + live itinerary preview" direction chosen) +
+      cohesive SVG icon set (replace emoji) + micro-interactions.
+- [ ] **P3 — instant demo (no signup):** generate a real sample itinerary inline on the homepage.
+- [ ] **Image assets:** add `public/og-image.jpg` (1200×630); replace default Vite favicon with a
+      TripNow ✦ mark; normalize destination-card scrim gradients for uniform contrast.
+- [ ] **Interactive map** — a `MapView` iframe already exists; a richer Leaflet/Mapbox view is
+      the remaining roadmap item.
 
 ---
 

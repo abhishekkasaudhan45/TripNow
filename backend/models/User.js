@@ -23,6 +23,15 @@ const userSchema = new mongoose.Schema(
       enum: ["user", "admin"],
       default: "user",
     },
+
+    // ── Email verification (non-blocking) ──
+    isVerified: { type: Boolean, default: false },
+    verifyTokenHash: { type: String, select: false },
+    verifyTokenExpires: { type: Date, select: false },
+
+    // ── Password reset ──
+    resetTokenHash: { type: String, select: false },
+    resetTokenExpires: { type: Date, select: false },
   },
   { timestamps: true }
 );

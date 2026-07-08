@@ -58,7 +58,7 @@ function Header() {
     { label: "Plan Trip", path: "/plan-trip" },
     { label: "Booking",   path: "/booking" },
     { label: "Dashboard", path: "/dashboard" },
-    ...(token ? [{ label: "Admin", path: "/admin" }] : []),
+    ...(token && user?.role === "admin" ? [{ label: "Admin", path: "/admin" }] : []),
   ];
 
   // ✅ Get first name only for display
@@ -135,7 +135,7 @@ function Header() {
           </div>
 
           {/* Desktop nav */}
-          <nav style={{ display:"flex", gap:"28px", alignItems:"center" }} className="hidden md:flex">
+          <nav style={{ gap:"28px", alignItems:"center" }} className="hidden md:flex">
             {links.map(l => (
               <span
                 key={l.path}

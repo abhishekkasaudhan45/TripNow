@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 // ✅ IMPORT OPTIMIZED IMAGE
 import OptimizedImage from "../components/OptimizedImage";
+import HeroPreview from "../components/HeroPreview";
+import { ICONS } from "../components/icons";
 
 // ✅ CLEANED URLS: Removed manual "?w=..." queries so OptimizedImage can handle it
 const DESTINATIONS = [
@@ -65,10 +67,10 @@ const CARD_GRADIENTS = [
 ];
 
 const WHY = [
-  { icon: "🤖", title: "AI Trip Planner",  desc: "Complete day-by-day itinerary crafted by AI in seconds — food, hotels, activities included." },
-  { icon: "💸", title: "Budget Aware",      desc: "Set your budget and get plans that actually fit. No surprises, no overspending." },
-  { icon: "⚡", title: "Instant Results",   desc: "Type your destination, hit plan, and go. No long forms, no waiting." },
-  { icon: "📱", title: "Save & Access",     desc: "All your trips saved in your dashboard, ready whenever you need them." },
+  { icon: "route",    title: "AI Trip Planner",  desc: "Complete day-by-day itinerary crafted by AI in seconds — food, hotels, activities included." },
+  { icon: "wallet",   title: "Budget Aware",      desc: "Set your budget and get plans that actually fit. No surprises, no overspending." },
+  { icon: "bolt",     title: "Instant Results",   desc: "Type your destination, hit plan, and go. No long forms, no waiting." },
+  { icon: "bookmark", title: "Save & Access",     desc: "All your trips saved in your dashboard, ready whenever you need them." },
 ];
 
 export default function Home() {
@@ -154,7 +156,10 @@ export default function Home() {
 
           <div className="fade-in" style={{ maxWidth:"860px", margin:"0 auto", animationDelay:"0.3s" }}>
             <form onSubmit={handleSubmit}>
-              <div style={{ display:"grid", gridTemplateColumns:"1.6fr 1fr 1fr 1fr auto", gap:"12px", background:"rgba(255,255,255,0.84)", backdropFilter:"blur(20px)", padding:"20px", borderRadius:"24px", border:"1px solid rgba(255,255,255,0.95)", boxShadow:"0 8px 48px rgba(0,0,0,0.10)" }}>
+              <div
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr_auto] gap-3"
+                style={{ background:"rgba(255,255,255,0.84)", backdropFilter:"blur(20px)", padding:"20px", borderRadius:"24px", border:"1px solid rgba(255,255,255,0.95)", boxShadow:"0 8px 48px rgba(0,0,0,0.10)" }}
+              >
                 {[
                   { label:"Destination", key:"destination", type:"text",   placeholder:"Where to? e.g. Goa" },
                   { label:"Check-in",    key:"checkin",     type:"date",   placeholder:"" },
@@ -173,8 +178,8 @@ export default function Home() {
                     />
                   </div>
                 ))}
-                <div style={{ display:"flex", alignItems:"flex-end" }}>
-                  <button type="submit" className="btn-glow"
+                <div className="flex items-end sm:col-span-2 lg:col-span-1">
+                  <button type="submit" className="btn-glow w-full lg:w-auto"
                     style={{ background:"linear-gradient(135deg,#f59e0b,#ef4444)", color:"#fff", border:"none", borderRadius:"14px", padding:"12px 20px", fontWeight:800, fontSize:"14px", cursor:"pointer", whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(239,68,68,0.3)", fontFamily:"'DM Sans',sans-serif" }}>
                     ✦ AI Planner
                   </button>
@@ -284,7 +289,7 @@ export default function Home() {
               Ready for your next adventure?
             </h2>
             <p style={{ color:"rgba(255,255,255,0.85)", fontSize:"16px", marginBottom:"28px" }}>
-              Join thousands of travellers planning smarter with AI.
+              Free to try — no card, no sign-up needed to see your first plan.
             </p>
             <Link to="/signup"
               style={{ display:"inline-flex", alignItems:"center", gap:"8px", padding:"14px 36px", borderRadius:"16px", background:"#fff", color:"#111827", fontWeight:800, fontSize:"15px", textDecoration:"none", boxShadow:"0 6px 24px rgba(0,0,0,0.15)", transition:"transform 0.2s" }}

@@ -10,7 +10,7 @@ An advanced, full-stack AI travel planning web application that generates person
 
 * **🤖 AI Itinerary Generation:** Leverages high-performance AI via the Groq API to construct optimized, day-by-day travel schedules based on user preferences.
 * **🎨 Glassmorphism UI:** A modern, accessible interface built with Tailwind CSS, utilizing smooth gradients, micro-interactions, and custom loading skeletons.
-* **🔒 Secure Authentication:** Complete authentication flow implemented via JSON Web Tokens (JWT) with HTTP-only cookies and protected route middleware.
+* **🔒 Secure Authentication:** Complete authentication flow implemented via JSON Web Tokens (JWT) with protected route middleware, role-based admin authorization, and rate-limited auth endpoints.
 * **⚡ Performance Optimized:** Engineered with lazy loading on the frontend (`React.lazy` and `Suspense`) and Gzip compression on the backend Express application.
 * **🎛️ User Dashboard & Admin Panels:** Distinct, protected views for users to manage saved trips and a strict administrative gateway for platform oversight.
 
@@ -50,12 +50,16 @@ Follow these steps to set up and run the project locally on your machine.
 git clone [https://github.com/ab_kasaudhan/travelx.git](https://github.com/ab_kasaudhan/tripnow.git)
 cd tripnow
 2. Configure Environment Variables
-Create a .env file in your backend directory:
+Copy `backend/.env.example` to `backend/.env` and fill in real values:
 
 Code snippet
+NODE_ENV=development
 PORT=5000
-MONGODB_URI=your_mongodb_connection_string
+MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_super_secret_jwt_key
+JWT_EXPIRES_IN=2h
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=change_me
 GROQ_API_KEY=your_groq_api_key
 CLIENT_URL=http://localhost:5173
 Create a .env file in your frontend directory:

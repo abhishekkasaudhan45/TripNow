@@ -7,3 +7,4 @@ backend/dist
 frontend/.env
 backend/.env
 npm-debug.log*
+*.log

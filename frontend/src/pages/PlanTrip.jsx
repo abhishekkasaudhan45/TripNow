@@ -9,7 +9,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../lib/api";
-import jsPDF from "jspdf";
 
 // 🔥 IMPORT YOUR CUSTOM MAP COMPONENT
 import MapView from "../components/MapView";
@@ -50,10 +49,6 @@ export default function PlanTrip() {
   const startDate   = state?.checkin     || "";
   const endDate     = state?.checkout    || "";
 
-  const dayCount = startDate && endDate
-    ? Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / 86400000))
-    : 0;
-
   const [tripData, setTripData]         = useState(null);
   const [editMode, setEditMode]         = useState(false);
   const [editableTrip, setEditableTrip] = useState(null);
@@ -63,6 +58,12 @@ export default function PlanTrip() {
   const [showToast, setShowToast]       = useState(false);
   const [openDays, setOpenDays]         = useState({ 0: true });
   const [activeTab, setActiveTab]       = useState("Itinerary");
+
+  // Day count: derive from the selected dates, but fall back to the number of
+  // days the AI actually returned (quick-plan/featured trips have no dates).
+  const dayCount = startDate && endDate
+    ? Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / 86400000))
+    : (Array.isArray(tripData?.days) ? tripData.days.length : 0);
 
   useEffect(() => {
     if (!state) { navigate("/"); return; }
@@ -110,9 +111,11 @@ export default function PlanTrip() {
     setOpenDays(prev => ({ ...prev, [dayKey]: !prev[dayKey] }));
 
   // 📄 COMPACT CREAMY-WHITE PDF GENERATOR (MAX 2-3 PAGES)
-  const downloadPDF = () => {
+  // jsPDF (~150 kB) is loaded on demand so it never weighs down the initial page load.
+  const downloadPDF = async () => {
     if (!tripData) return;
 
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const PW = 210, PH = 297;
     const ML = 16, MR = 16;
@@ -248,7 +251,7 @@ export default function PlanTrip() {
     sectionHead("Day-by-Day Itinerary", "#D97706");
     const daysArr = Array.isArray(tripData.days) ? tripData.days : [];
 
-    daysArr.forEach((day, i) => {
+    daysArr.forEach((day) => {
       const mLines = doc.splitTextToSize(safeString(day.morning), CW - 24);
       const aLines = doc.splitTextToSize(safeString(day.afternoon), CW - 24);
       const eLines = doc.splitTextToSize(safeString(day.evening), CW - 24);

@@ -107,7 +107,12 @@ export default function Login() {
             </div>
 
             <div>
-              <label style={{ fontSize:"11px", fontWeight:700, color:"#374151", textTransform:"uppercase", letterSpacing:"0.1em", display:"block", marginBottom:"6px" }}>Password</label>
+              <label style={{ fontSize:"11px", fontWeight:700, color:"#374151", textTransform:"uppercase", letterSpacing:"0.1em", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px" }}>
+                <span>Password</span>
+                <Link to="/forgot-password" style={{ color:"#f59e0b", fontWeight:700, fontSize:"11px", textDecoration:"none", textTransform:"none", letterSpacing:0 }}>
+                  Forgot password?
+                </Link>
+              </label>
               <div style={{ position:"relative" }}>
                 <input className="inp" type={showPass ? "text" : "password"} placeholder="••••••••" value={form.password} required
                   onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
