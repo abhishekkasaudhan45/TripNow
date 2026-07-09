@@ -112,8 +112,7 @@ Return ONLY valid JSON (no markdown, no backticks, no explanation):
     // 🛡️ Send a uniform, clean message back to the frontend without leaking API errors
     res.status(500).json({
       success: false,
-      message: env.isProduction ? "AI itinerary generation failed. Please try again." : (errDetail?.message || "AI generation failed"),
-      ...(env.isProduction ? {} : { error: errDetail }),
+      message: "AI itinerary generation failed. Please try again.",
     });
   }
 };

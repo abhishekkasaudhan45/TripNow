@@ -6,10 +6,10 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// ✅ FIX: Read from localStorage (where Login/Signup save the token)
+// Read from either storage — Login saves to sessionStorage, some flows use localStorage.
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;

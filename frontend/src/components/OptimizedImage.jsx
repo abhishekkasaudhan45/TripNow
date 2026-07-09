@@ -20,7 +20,7 @@ export default function OptimizedImage({
       width={width}
       height={height}
       loading={priority ? "eager" : "lazy"}
-      fetchpriority={priority ? "high" : "auto"}
+      fetchPriority={priority ? "high" : "auto"}
       decoding="async"
       className={`object-cover ${className}`}
     />

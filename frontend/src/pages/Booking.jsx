@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../lib/api";
 
@@ -63,7 +63,16 @@ export default function Booking() {
       setBookingId(res.data?.data?._id || "CONFIRMED");
       setStatus("success");
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.error || "Booking failed. Please try again.";
+      const code = err?.response?.status;
+      const raw = err?.response?.data?.message || "";
+      let msg;
+      if (code === 401 || raw.toLowerCase().includes("token") || raw.toLowerCase().includes("authoriz")) {
+        msg = "You need to sign in to confirm a booking. Please log in or create an account.";
+      } else if (code === 403) {
+        msg = "You don't have permission to book this trip.";
+      } else {
+        msg = raw || "Booking failed. Please try again.";
+      }
       setErrMsg(msg);
       setStatus("error");
     }

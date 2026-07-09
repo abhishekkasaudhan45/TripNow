@@ -49,11 +49,3 @@ export function IconBookmark({ size = 24 }) {
     </svg>
   );
 }
-
-// Lookup used by data-driven sections (e.g. the "Why" cards).
-export const ICONS = {
-  route: IconRoute,
-  wallet: IconWallet,
-  bolt: IconBolt,
-  bookmark: IconBookmark,
-};

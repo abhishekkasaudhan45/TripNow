@@ -3,7 +3,9 @@ import { useNavigate, Link } from "react-router-dom";
 // ✅ IMPORT OPTIMIZED IMAGE
 import OptimizedImage from "../components/OptimizedImage";
 import HeroPreview from "../components/HeroPreview";
-import { ICONS } from "../components/icons";
+import { IconRoute, IconWallet, IconBolt, IconBookmark } from "../components/icons";
+
+const ICONS = { route: IconRoute, wallet: IconWallet, bolt: IconBolt, bookmark: IconBookmark };
 
 // ✅ CLEANED URLS: Removed manual "?w=..." queries so OptimizedImage can handle it
 const DESTINATIONS = [
@@ -199,6 +201,9 @@ export default function Home() {
               </button>
             ))}
           </div>
+
+          {/* ── LIVE ITINERARY PREVIEW ── */}
+          <HeroPreview />
         </div>
       </div>
 
@@ -211,14 +216,23 @@ export default function Home() {
           </h2>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"20px" }}>
-          {WHY.map((w, i) => (
+          {WHY.map((w, i) => {
+            const IconComp = ICONS[w.icon];
+            return (
             <div key={i} className="card-hover"
               style={{ background:"rgba(255,255,255,0.72)", backdropFilter:"blur(16px)", border:"1px solid rgba(255,255,255,0.95)", borderRadius:"24px", padding:"28px", boxShadow:"0 4px 20px rgba(0,0,0,0.06)" }}>
-              <div style={{ fontSize:"32px", marginBottom:"14px" }}>{w.icon}</div>
+              {IconComp ? (
+                <div style={{ width:"38px", height:"38px", borderRadius:"11px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:"14px", color:"#fff" }}>
+                  <IconComp size={20} />
+                </div>
+              ) : (
+                <div style={{ fontSize:"32px", marginBottom:"14px" }}>{w.icon}</div>
+              )}
               <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"18px", fontWeight:700, color:"#111827", marginBottom:"8px" }}>{w.title}</h3>
               <p style={{ fontSize:"14px", color:"#6b7280", lineHeight:1.6, margin:0 }}>{w.desc}</p>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

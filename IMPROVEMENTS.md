@@ -106,12 +106,27 @@ Security & abuse holes that can cost money or leak data. Highest priority.
       Production build + lint green (one pre-existing `set-state-in-effect` warning in
       `Header.jsx`, unrelated to this work).
 
-### Remaining (next rounds, per approved plan)
-- [ ] **P2 — hero redesign** ("refined centered + live itinerary preview" direction chosen) +
-      cohesive SVG icon set (replace emoji) + micro-interactions.
-- [ ] **P3 — instant demo (no signup):** generate a real sample itinerary inline on the homepage.
-- [ ] **Image assets:** add `public/og-image.jpg` (1200×630); replace default Vite favicon with a
-      TripNow ✦ mark; normalize destination-card scrim gradients for uniform contrast.
+### P2 — Hero redesign + SVG icons (done, verified live)
+- [x] **Live itinerary preview** (`HeroPreview.jsx`) — an animated card below the search box that
+      types out a sample day-by-day itinerary in a loop (Goa → Manali → Jaipur). No backend
+      call needed; gives the visitor an instant, tangible taste of what TripNow produces.
+- [x] **Cohesive SVG icon set** (`icons.jsx`) — replaced the mixed emoji (🤖💸⚡📱) in the "Why
+      TripNow" section with a unified 24×24 stroke-based icon family (Route, Wallet, Bolt,
+      Bookmark). Shared stroke width, caps, and color inheritance so they read as one brand.
+- [x] **Minor bug fix** — fixed `fetchpriority` → `fetchPriority` React DOM warning in
+      `OptimizedImage.jsx`.
+
+### P3 — Instant demo (no signup) — next round
+- [ ] Generate a real sample itinerary inline on the homepage using the Groq API directly from
+      the preview card (or a "See a real plan" button).
+
+### Image assets (done)
+- [x] **OG image** — 1200×630 branded JPEG (`public/og-image.jpg`) created from the TripNow
+      design system (Playfair + DM Sans, amber→red gradient, pastel background). Link previews
+      on WhatsApp, LinkedIn, Twitter, and Discord will now show a rich card.
+- [x] **Favicon** — replaced the default Vite logo with a TripNow ✦ mark
+      (`public/favicon.svg`, amber→red gradient on rounded square). Shows in browser tabs,
+      bookmarks, and mobile shortcuts.
 - [ ] **Interactive map** — a `MapView` iframe already exists; a richer Leaflet/Mapbox view is
       the remaining roadmap item.
 
