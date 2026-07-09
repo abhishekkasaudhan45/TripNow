@@ -152,3 +152,127 @@ Security & abuse holes that can cost money or leak data. Highest priority.
 
 _Generated as a planning artifact. Start with Phase 1 — it's the difference between a demo
 and something safe to share publicly._
+
+---
+
+## 🔍 Full Code Quality Audit (July 2026)
+
+### 1. FIVE-AXIS CODE REVIEW
+
+#### Axis 1 — Routes / API (error handling, validation, uncaught promises)
+
+| Finding | Severity | Location |
+|---------|----------|----------|
+| **`bookingRoutes.js` wraps entire router in `protect`** but `SharedTripRoute.js` has a separate path — no gap there, but `bookingController.js` doesn't scope `getBookingById` to the trip owner (any authed user can see any trip by ID) | 🟡 MEDIUM | `backend/routes/bookingRoutes.js:15` |
+| **`SharedTripRoute.js`** has no try/catch for the DB query at line 14 (only a catch for the share-creation) | 🟡 MEDIUM | `backend/routes/SharedTripRoute.js:14` |
+| **`tripController.js`** (85 lines) never uses `next(error)` — errors are handled inline. Inconsistent with the pattern used in `bookingController.js` that properly calls `next(error)`. | 🟢 LOW | `backend/controllers/tripController.js` |
+
+#### Axis 2 — Components (long functions, duplicate logic, unclear naming)
+
+| Finding | Severity | Location |
+|---------|----------|----------|
+| **`PlanTrip.jsx` — 804 lines.** Contains inline CSS definitions (~90 lines), PDF generation (~250 lines), data parsing, and UI rendering all in one file. Should be split. | 🔴 HIGH | `frontend/src/pages/PlanTrip.jsx` |
+| **`Dashboard.jsx` — 799 lines.** Similar issue. Inline styles (111 `style={{}}` callouts), SVG icons duplicated inline, trip card rendering mixed with edit modal logic. | 🔴 HIGH | `frontend/src/pages/Dashboard.jsx` |
+| **`SharedTrip.jsx` — 579 lines.** Same pattern: inline CSS classes, data parsing, rendering, and error handling in one file. | 🟡 MEDIUM | `frontend/src/pages/SharedTrip.jsx` |
+| **`safeString()` function** — handles 5 different types and is used only in the PDF generator. Over-engineered for its scope. | 🟢 LOW | `PlanTrip.jsx:35` |
+
+#### Axis 3 — Database Queries (N+1, missing indexes)
+
+| Finding | Severity | Location |
+|---------|----------|----------|
+| **`Booking` model has only one index** — just `destination` has `index: true`. No index on `user` field despite every "my trips" query filtering by `user._id` with `sort({ createdAt: -1 })`. Every dashboard load does a full collection scan. | 🟡 MEDIUM | `backend/models/Booking.js:12` |
+| **`Trip` model has zero indexes** and no `user` field at all (unused model). | 🟢 LOW | `backend/models/Trip.js` |
+| **No N+1 queries found** — the app uses `find()` with projection (`select("-password")`/`.lean()`) correctly. | ✅ CLEAN | — |
+
+#### Axis 4 — Type Safety / Implicit Coercions
+
+| Finding | Severity | Location |
+|---------|----------|----------|
+| **`aiController.js:99`** `guests: 1` hardcoded even when the AI trip generated for multiple travellers. The number of guests from the request is ignored when saving an AI-generated trip. | 🟡 MEDIUM | `backend/controllers/aiController.js:99` |
+
+#### Axis 5 — Architecture (business logic in UI)
+
+| Finding | Severity | Location |
+|---------|----------|----------|
+| **PDF generation lives entirely in `PlanTrip.jsx`** — ~250 lines of imperative jsPDF code mixed with React component state. Should be a service/util. | 🟡 MEDIUM | `PlanTrip.jsx:114-362` |
+| **`HeroPreview.jsx`** has a hardcoded list of sample trips (Goa/Manali/Jaipur) duplicating the data in `Home.jsx`'s `DESTINATIONS` and quick-plan arrays. If a new destination is added in one place, the preview won't match. | 🟢 LOW | `frontend/src/components/HeroPreview.jsx:10-34` |
+| **`Footer.jsx` — 252 lines**, including a full inline FeedbackForm component with EmailJS integration. Could be extracted. | 🟢 LOW | `frontend/src/layouts/Footer.jsx` |
+
+---
+
+### 2. CODE SIMPLIFICATION
+
+#### Files over 500 lines (Rule of 500)
+
+| File | Lines | Recommendation |
+|------|-------|----------------|
+| `frontend/src/pages/PlanTrip.jsx` | **804** | Split into: `PlanTrip.jsx` (logic + state), `components/TripPDF.jsx` (PDF generation), `components/TripView.jsx` (itinerary display) |
+| `frontend/src/pages/Dashboard.jsx` | **799** | Split into: `Dashboard.jsx` (layout + state), `components/TripCard.jsx` (trip card), `components/EditTripModal.jsx` (edit form) |
+| `frontend/src/pages/SharedTrip.jsx` | **579** | Split into: `SharedTrip.jsx` (main view), `components/TripDisplay.jsx` (reusable itinerary display shared with PlanTrip) |
+
+#### "Three or More" repeated patterns
+
+| Pattern | Count | Occurrences |
+|---------|-------|-------------|
+| `dayCount` calculation (date diff → days) | **3×** | PlanTrip.jsx:52, Dashboard.jsx, Booking.jsx |
+| `localStorage → sessionStorage` token fallback | **6×** | Header.jsx:13, Dashboard.jsx:27, Dashboard.jsx:221, Admin.jsx:16, ProtectedRoute.jsx:6, auth.js:11 |
+| Gmail `mailto:` link | **2×** | Footer.jsx:22 (Email social card), Privacy.jsx, Terms.jsx |
+
+#### Side-effect patterns (not anti-patterns, but worth noting)
+
+| Pattern | Count | Where |
+|---------|-------|-------|
+| `style={{}}` inline styles | **47** in PlanTrip, **111** in Dashboard | Makes future responsive fixes harder |
+| `.catch(() => {})` (silent swallows) | **3** | Dashboard.jsx:84, Dashboard.jsx:232, Dashboard.jsx:527 |
+
+---
+### 3. SECURITY AUDIT
+
+| Finding | Severity | Detail |
+|---------|----------|--------|
+| **API keys in `.env` files** (not committed — ✅) | ✅ CLEAN | Backend `.env` has `GROQ_API_KEY`; frontend `.env` has `VITE_GOOGLE_MAPS_API_KEY` and `VITE_OPENWEATHER_API_KEY`. All three `.env` files are in `.gitignore`. |
+| **EmailJS keys hardcoded in Footer.jsx** | 🟡 MEDIUM | `EMAILJS_PUBLIC_KEY`, `SERVICE_ID`, `TEMPLATE_ID` are plain-text strings in `Footer.jsx:3-5`. These are public keys (designed to be client-side) but the `template_id` (`template_x1hv26r`) exposes your dashboard's template naming. |
+| **Auth tokens in localStorage** | 🟡 MEDIUM | Known design choice (not a bug you need to fix now, but XSS could steal tokens). Flagged in earlier phases. |
+| **Backend inputs validated with Zod** | ✅ CLEAN | `backend/validators/*.js` covers signup, login, forgot/reset password, and AI trip schemas. |
+| **Rate limiting on auth + AI routes** | ✅ CLEAN | Added in Phase 1. |
+| **SQL/NoSQL injection risk** | ✅ CLEAN | Mongoose + Zod prevent injection by design. |
+| **CORS tightened** | ✅ CLEAN | Phase 1 fixed from wildcard vercel.app to explicit allow-list. |
+
+---
+
+### 4. PERFORMANCE AUDIT
+
+#### Bundle size (current)
+
+| Chunk | Size (built) | Size (gzip) | Notes |
+|------|-------------|-------------|-------|
+| `PlanTrip` | 31 kB | 8.7 kB | ✅ Lazy-imported jsPDF is separate chunk |
+| `jspdf` | 386 kB | 126 kB | Only loads on "Download PDF" click |
+| `html2canvas` | ~4.1 MB on disk | bundled implicitly | **Is anyone actually importing this?** Not found in any source import — it may be a transitive dependency of jsPDF or an unused dep. Check `package.json` — it's listed as a dependency. If unused, removing it saves 4+ MB. |
+| `Main index` | 283 kB | 90 kB | React + Router + layout |
+| **Total initial** | **~315 kB** | **~99 kB** | Reasonable for a React SPA |
+
+#### Key perf findings
+
+| Finding | Severity | Detail |
+|---------|----------|--------|
+| **`html2canvas` is listed in `package.json` but `grep` shows zero imports in source** | 🟡 MEDIUM | If truly unused, removing it saves 4+ MB from `node_modules` and eliminates it from the dependency tree. Verify by deleting it and running the build + checking if `PlanTrip`/PDF or the screenshot feature breaks. |
+| **`lodash.debounce`** (used once in `Search.jsx`) | 🟢 LOW | Tiny utility (~1 kB), no action needed. If you want to slim further, replace with inline `setTimeout` debounce. |
+| **Images are WebP via OptimizedImage** | ✅ CLEAN | Lazy loading, width-aware URLs, `fetchPriority` support. |
+| **Database missing indexes** | 🟡 MEDIUM | `Booking` model has no index on `user` field — every dashboard "my trips" query scans the entire collection. Add `user: { index: true }`. |
+| **React.lazy + Suspense for all routes** | ✅ CLEAN | Code-splitting is correct. |
+
+---
+
+### Summary — priority fix list
+
+| Priority | What | Where | Effort |
+|----------|------|-------|--------|
+| 🔴 HIGH | Split `PlanTrip.jsx` (804 lines) into 3 files | `frontend/src/pages/PlanTrip.jsx` | ~1 hr |
+| 🔴 HIGH | Split `Dashboard.jsx` (799 lines) into 3 files | `frontend/src/pages/Dashboard.jsx` | ~1 hr |
+| 🟡 MEDIUM | Add `user` index to `Booking` model | `backend/models/Booking.js` | 5 min |
+| 🟡 MEDIUM | Remove `html2canvas` if unused | `frontend/package.json` | 5 min |
+| 🟡 MEDIUM | Verify `getBookingById` scopes to trip owner | `backend/controllers/bookingController.js:47` | 15 min |
+| 🟢 LOW | Extract PDF generation to service | `PlanTrip.jsx:114-362` → `backend/services/pdfService.js` | ~30 min |
+| 🟢 LOW | Add try/catch to `SharedTripRoute.js` | `backend/routes/SharedTripRoute.js:14` | 5 min |
+| 🟢 LOW | `dayCount` calc repeated 3× → shared utility | `utils/date.js` | 10 min |

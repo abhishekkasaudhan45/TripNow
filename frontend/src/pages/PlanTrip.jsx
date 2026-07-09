@@ -589,7 +589,7 @@ export default function PlanTrip() {
                           state: { destination, budget, checkin: startDate, checkout: endDate, tripData }
                         })}
                       >
-                        ✈️ Book This Trip →
+                        ✈️ Save This Trip →
                       </button>
                     )}
                   </div>

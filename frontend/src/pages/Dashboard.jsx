@@ -36,10 +36,7 @@ function toInputDate(d) {
   if (!d) return "";
   return new Date(d).toISOString().split("T")[0];
 }
-function daysBetween(a, b) {
-  if (!a || !b) return 0;
-  return Math.max(1, Math.round((new Date(b) - new Date(a)) / 86400000));
-}
+import { dayCount } from "../utils/date";
 function getDestinationEmoji(dest = "") {
   const d = dest.toLowerCase();
   if (["goa","beach","bali","maldives","phuket"].some(k => d.includes(k))) return "🏖️";
@@ -370,7 +367,7 @@ function EditModal({ trip, onClose, onSaved }) {
 
 // ── Trip Card (✅ Memoized for Performance) ───────────────────────────────
 const TripCard = memo(function TripCard({ trip, index, onView, onDelete, onShare, onEdit, onSplit }) {
-  const days  = daysBetween(trip.checkin, trip.checkout);
+  const days  = dayCount(trip.checkin, trip.checkout);
   const grad  = GRADIENTS[index % GRADIENTS.length];
   const emoji = getDestinationEmoji(trip.destination);
   const isAI  = !!trip.aiPlan;
@@ -599,7 +596,7 @@ export default function Dashboard() {
   // ✅ USEMEMO: Expensive math and set calculations
   const { aiCount, totalDays, destinations } = useMemo(() => {
     const aiCount = trips.filter(t => !!t.aiPlan).length;
-    const totalDays = trips.reduce((s, t) => s + daysBetween(t.checkin, t.checkout), 0);
+    const totalDays = trips.reduce((s, t) => s + dayCount(t.checkin, t.checkout), 0);
     const destinations = new Set(trips.map(t => t.destination?.toLowerCase())).size;
     return { aiCount, totalDays, destinations };
   }, [trips]);

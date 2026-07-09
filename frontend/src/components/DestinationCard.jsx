@@ -52,7 +52,7 @@ function DestinationCard({ destination }) {
             text-black px-4 py-2 rounded-lg font-semibold 
             hover:scale-110 transition"
           >
-            ✈️ Book Now
+✦ Plan Now
           </button>
         </div>
       </div>

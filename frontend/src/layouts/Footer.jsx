@@ -240,7 +240,7 @@ function Footer() {
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"10px" }}>
           <p style={{ color:"rgba(255,255,255,0.26)", fontSize:"13px" }}>© 2026 TripNow · Made by Abhishek Kasaudhan</p>
           <div style={{ display:"flex", gap:"18px" }}>
-            {[["Home","/"],["Booking","/booking"],["Dashboard","/dashboard"],["Privacy","/privacy"],["Terms","/terms"]].map(([l,p]) => (
+            {[["Home","/"],["Save Trip","/booking"],["Dashboard","/dashboard"],["Privacy","/privacy"],["Terms","/terms"]].map(([l,p]) => (
               <a key={l} href={p} className="foot-link">{l}</a>
             ))}
           </div>

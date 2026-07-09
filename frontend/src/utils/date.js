@@ -7,6 +7,9 @@ export const formatDate = (value) =>
     year: "numeric",
   });
 
+export const dayCount = (start, end) =>
+  start && end ? Math.max(1, Math.round((new Date(end) - new Date(start)) / 86400000)) : 0;
+
 export const formatDateTime = (value) =>
   new Date(value).toLocaleString("en-IN", {
     day: "2-digit",

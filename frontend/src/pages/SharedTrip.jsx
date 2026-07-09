@@ -71,44 +71,31 @@ export default function SharedTrip() {
 
   // ── STYLES ────────────────────────────────────────────────────────────
   const css = `
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600;1,700&family=Syne:wght@500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600;1,700&family=DM+Sans:wght@400;500;600;700;800&display=swap');
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     .st-root {
       min-height: 100vh;
-      background: #0b0f1a;
-      font-family: 'Syne', sans-serif;
-      color: #e2e8f0;
+      background: linear-gradient(160deg,#fff7ed 0%,#fef3c7 18%,#fde8d8 36%,#fce7f3 55%,#ede9fe 75%,#e0f2fe 100%);
+      font-family: 'DM Sans', sans-serif;
+      color: #334155;
       position: relative;
       overflow-x: hidden;
     }
 
-    /* ── starfield ── */
-    .st-stars {
-      position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      background:
-        radial-gradient(1px 1px at 15% 20%, rgba(255,255,255,0.55) 0%, transparent 100%),
-        radial-gradient(1px 1px at 42% 55%, rgba(255,255,255,0.45) 0%, transparent 100%),
-        radial-gradient(1px 1px at 70% 30%, rgba(255,255,255,0.4)  0%, transparent 100%),
-        radial-gradient(1px 1px at 85% 72%, rgba(255,255,255,0.55) 0%, transparent 100%),
-        radial-gradient(1px 1px at 28% 80%, rgba(255,255,255,0.3)  0%, transparent 100%),
-        radial-gradient(1px 1px at 57% 10%, rgba(255,255,255,0.45) 0%, transparent 100%),
-        radial-gradient(1px 1px at 92% 44%, rgba(255,255,255,0.35) 0%, transparent 100%);
-    }
+    /* ── decorative orbs (light theme) ── */
     .st-orb-1 {
       position: fixed; top: -20%; left: -15%;
       width: 60vw; height: 60vw; border-radius: 50%;
-      background: radial-gradient(circle, rgba(245,158,11,0.11) 0%, transparent 65%);
+      background: radial-gradient(circle, rgba(245,158,11,0.13) 0%, transparent 65%);
       filter: blur(60px); pointer-events: none; z-index: 0;
-      animation: stFloat 24s ease-in-out infinite;
     }
     .st-orb-2 {
       position: fixed; bottom: -20%; right: -15%;
       width: 55vw; height: 55vw; border-radius: 50%;
-      background: radial-gradient(circle, rgba(99,102,241,0.11) 0%, transparent 65%);
+      background: radial-gradient(circle, rgba(167,139,250,0.1) 0%, transparent 65%);
       filter: blur(70px); pointer-events: none; z-index: 0;
-      animation: stFloat 30s ease-in-out infinite reverse;
     }
     @keyframes stFloat {
       0%,100% { transform: translate(0,0); }
@@ -118,13 +105,14 @@ export default function SharedTrip() {
     /* ── TOP CTA BANNER ── */
     .st-cta {
       position: relative; z-index: 10;
-      background: linear-gradient(90deg, rgba(245,158,11,0.14) 0%, rgba(239,68,68,0.11) 100%);
-      border-bottom: 1px solid rgba(245,158,11,0.18);
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(245,158,11,0.2);
       padding: 12px 24px;
       display: flex; align-items: center; justify-content: center; gap: 14px;
       flex-wrap: wrap; text-align: center;
     }
-    .st-cta-text { font-size: 13px; font-weight: 700; color: #fcd34d; letter-spacing: 0.02em; }
+    .st-cta-text { font-size: 13px; font-weight: 700; color: #b45309; letter-spacing: 0.02em; }
     .st-cta-btn {
       padding: 7px 20px;
       background: linear-gradient(135deg, #f59e0b, #ef4444);
@@ -146,14 +134,14 @@ export default function SharedTrip() {
 
     /* ── HERO CARD ── */
     .st-hero {
-      background: rgba(255,255,255,0.03);
-      backdrop-filter: blur(28px);
-      -webkit-backdrop-filter: blur(28px);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.72);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255,255,255,0.95);
       border-radius: 24px;
       padding: 40px 40px 36px;
       margin-bottom: 20px;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.04);
+      box-shadow: 0 8px 36px rgba(0,0,0,0.07);
     }
     .st-badge {
       display: inline-flex; align-items: center; gap: 6px;
@@ -162,107 +150,106 @@ export default function SharedTrip() {
       border: 1px solid rgba(245,158,11,0.28);
       font-size: 10px; font-weight: 800;
       letter-spacing: .14em; text-transform: uppercase;
-      color: #fbbf24; margin-bottom: 20px;
+      color: #b45309; margin-bottom: 20px;
     }
     .st-title {
       font-family: 'Cormorant Garamond', serif;
       font-size: clamp(34px, 6vw, 58px);
       font-weight: 700; line-height: 1.05;
-      color: #f8fafc; text-transform: capitalize;
+      color: #111827; text-transform: capitalize;
       margin-bottom: 8px;
     }
-    .st-title em { font-style: italic; color: #fbbf24; }
-    .st-dates { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 24px; }
+    .st-title em { font-style: italic; color: #f59e0b; }
+    .st-dates { font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 24px; }
     .st-pills { display: flex; gap: 10px; flex-wrap: wrap; }
     .st-pill {
       display: inline-flex; align-items: center; gap: 7px;
       padding: 8px 16px; border-radius: 12px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.09);
-      font-size: 13px; font-weight: 600; color: #cbd5e1;
+      background: rgba(255,255,255,0.8);
+      border: 1px solid rgba(0,0,0,0.06);
+      font-size: 13px; font-weight: 600; color: #475569;
     }
-    .st-pill b { font-weight: 800; color: #f8fafc; }
+    .st-pill b { font-weight: 800; color: #111827; }
 
     /* ── MAIN PANEL ── */
     .st-panel {
-      background: rgba(255,255,255,0.03);
+      background: rgba(255,255,255,0.65);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.9);
       border-radius: 20px; overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.06);
     }
 
     /* ── TABS ── */
     .st-tabs {
       display: flex; gap: 0;
-      border-bottom: 1px solid rgba(255,255,255,0.07);
-      background: rgba(0,0,0,0.18);
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      background: rgba(255,255,255,0.6);
       overflow-x: auto;
     }
     .st-tab {
       padding: 14px 20px;
       font-size: 11px; font-weight: 800;
       letter-spacing: .1em; text-transform: uppercase;
-      color: #334155; cursor: pointer;
+      color: #94a3b8; cursor: pointer;
       border-bottom: 2px solid transparent;
       white-space: nowrap;
       transition: color 0.2s, border-color 0.2s;
     }
     .st-tab:hover { color: #64748b; }
-    .st-tab.active { color: #fbbf24; border-bottom-color: #f59e0b; }
+    .st-tab.active { color: #b45309; border-bottom-color: #f59e0b; }
 
     .st-content { padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; }
 
     /* ── STAT CARDS ── */
     .st-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .st-stat {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.8);
+      border: 1px solid rgba(0,0,0,0.05);
       border-radius: 14px; padding: 16px; text-align: center;
     }
-    .st-stat-lbl { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #334155; margin-bottom: 6px; }
-    .st-stat-val { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 700; color: #f8fafc; }
-    .st-stat-val.amber { color: #fbbf24; }
-    .st-stat-val.green { color: #34d399; }
-    .st-stat-val.violet { color: #c084fc; }
+    .st-stat-lbl { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; }
+    .st-stat-val { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 700; color: #111827; }
+    .st-stat-val.amber { color: #b45309; }
+    .st-stat-val.green { color: #047857; }
+    .st-stat-val.violet { color: #7c3aed; }
 
     /* ── SECTION LABEL ── */
-    .st-sec { font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: #334155; }
+    .st-sec { font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: #94a3b8; }
 
     /* ── DAY ACCORDION ── */
     .st-day {
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.06);
       border-radius: 14px; overflow: hidden;
       transition: border-color 0.2s;
     }
-    .st-day.open { border-color: rgba(245,158,11,0.22); }
+    .st-day.open { border-color: rgba(245,158,11,0.35); }
     .st-day-hdr { display: flex; align-items: center; cursor: pointer; user-select: none; }
     .st-day-num {
       width: 52px; height: 52px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 13px; font-weight: 800; color: #334155;
-      border-right: 1px solid rgba(255,255,255,0.05); flex-shrink: 0;
+      font-size: 13px; font-weight: 800; color: #94a3b8;
+      border-right: 1px solid rgba(0,0,0,0.04); flex-shrink: 0;
     }
-    .st-day-num.c0 { color: #fbbf24; }
-    .st-day-num.c1 { color: #34d399; }
-    .st-day-num.c2 { color: #60a5fa; }
-    .st-day-num.c3 { color: #c084fc; }
-    .st-day-ttl { flex: 1; padding: 0 16px; font-size: 14px; font-weight: 700; color: #e2e8f0; }
-    .st-day-chev { padding: 0 18px; color: #334155; font-size: 13px; transition: transform 0.3s; flex-shrink: 0; }
-    .st-day-chev.open { transform: rotate(180deg); color: #fbbf24; }
+    .st-day-num.c0 { color: #f59e0b; }
+    .st-day-num.c1 { color: #10b981; }
+    .st-day-num.c2 { color: #3b82f6; }
+    .st-day-num.c3 { color: #8b5cf6; }
+    .st-day-ttl { flex: 1; padding: 0 16px; font-size: 14px; font-weight: 700; color: #334155; }
+    .st-day-chev { padding: 0 18px; color: #94a3b8; font-size: 13px; transition: transform 0.3s; flex-shrink: 0; }
+    .st-day-chev.open { transform: rotate(180deg); color: #f59e0b; }
 
     .st-day-body {
-      border-top: 1px solid rgba(255,255,255,0.05);
+      border-top: 1px solid rgba(0,0,0,0.04);
       display: none;
       grid-template-columns: 1fr 1fr 1fr;
-      background: rgba(0,0,0,0.14);
+      background: rgba(249,250,251,0.8);
     }
     .st-day-body.open { display: grid; }
-    @media (max-width: 640px) { .st-day-body.open { grid-template-columns: 1fr; } }
 
-    .st-slot { padding: 16px; border-right: 1px solid rgba(255,255,255,0.04); }
+    .st-slot { padding: 16px; border-right: 1px solid rgba(0,0,0,0.03); }
     .st-slot:last-child { border-right: none; }
     .st-slot-lbl {
       font-size: 10px; font-weight: 800; letter-spacing: .12em;
@@ -277,54 +264,55 @@ export default function SharedTrip() {
     .st-brow {
       display: flex; justify-content: space-between; align-items: center;
       padding: 12px 16px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.85);
+      border: 1px solid rgba(0,0,0,0.06);
       border-radius: 10px;
     }
-    .st-brow.total { grid-column: 1/-1; border-color: rgba(52,211,153,0.22); background: rgba(52,211,153,0.05); }
-    .st-bkey { font-size: 12px; font-weight: 600; color: #475569; text-transform: capitalize; }
-    .st-bval { font-size: 14px; font-weight: 800; color: #34d399; }
+    .st-brow.total { grid-column: 1/-1; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.06); }
+    .st-bkey { font-size: 12px; font-weight: 600; color: #64748b; text-transform: capitalize; }
+    .st-bval { font-size: 14px; font-weight: 800; color: #059669; }
     .st-brow.total .st-bval { font-size: 18px; }
 
     /* ── TIPS GRID ── */
     .st-tgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .st-tip {
       display: flex; gap: 12px; padding: 14px 16px;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.85);
+      border: 1px solid rgba(0,0,0,0.06);
       border-radius: 10px; transition: border-color 0.2s;
     }
-    .st-tip:hover { border-color: rgba(245,158,11,0.18); }
-    .st-tip-n { font-size: 12px; font-weight: 800; color: #334155; flex-shrink: 0; min-width: 22px; }
+    .st-tip:hover { border-color: rgba(245,158,11,0.25); }
+    .st-tip-n { font-size: 12px; font-weight: 800; color: #94a3b8; flex-shrink: 0; min-width: 22px; }
     .st-tip-t { font-size: 13px; font-weight: 500; color: #64748b; line-height: 1.6; }
 
     /* ── BOTTOM CTA ── */
     .st-bcta {
       margin-top: 28px;
-      background: rgba(255,255,255,0.02);
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(245,158,11,0.14);
+      background: linear-gradient(135deg,#f59e0b,#ef4444);
+      border: none;
       border-radius: 20px; padding: 40px 32px;
       text-align: center;
     }
     .st-bcta-title {
       font-family: 'Cormorant Garamond', serif;
       font-size: 30px; font-weight: 700;
-      color: #f8fafc; margin-bottom: 10px;
+      color: #fff; margin-bottom: 10px;
     }
-    .st-bcta-sub { font-size: 14px; font-weight: 500; color: #475569; line-height: 1.65; margin-bottom: 24px; }
+    .st-bcta-sub { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.85); line-height: 1.65; margin-bottom: 24px; }
     .st-bcta-btn {
       display: inline-flex; align-items: center; gap: 8px;
       padding: 14px 32px;
-      background: linear-gradient(135deg, #f59e0b, #ef4444);
-      border: none; border-radius: 14px;
-      font-family: 'Syne', sans-serif;
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 14px;
+      font-family: 'DM Sans', sans-serif;
       font-size: 15px; font-weight: 800; color: #fff;
       cursor: pointer; letter-spacing: .03em;
-      box-shadow: 0 8px 28px rgba(245,158,11,0.28);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.15);
       transition: transform 0.15s, box-shadow 0.15s;
     }
-    .st-bcta-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(245,158,11,0.38); }
+    .st-bcta-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(0,0,0,0.22); }
 
     /* ── LOADING / ERROR ── */
     .st-center {
@@ -333,19 +321,24 @@ export default function SharedTrip() {
     }
     .st-spinner {
       width: 40px; height: 40px;
-      border: 3px solid rgba(245,158,11,0.14);
+      border: 3px solid rgba(245,158,11,0.2);
       border-top-color: #f59e0b;
       border-radius: 50%;
       animation: spin 0.9s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    @media (max-width: 640px) {
+    @media (max-width: 768px) {
       .st-hero    { padding: 28px 20px 24px; }
       .st-content { padding: 20px 16px; }
       .st-stats   { grid-template-columns: 1fr 1fr; }
       .st-bgrid, .st-tgrid { grid-template-columns: 1fr; }
       .st-bcta    { padding: 28px 20px; }
+    }
+    @media (max-width: 640px) {
+      .st-day-body.open { grid-template-columns: 1fr; }
+      .st-tab { padding: 12px 14px; font-size: 10px; }
+      .st-bcta-title { font-size: 24px; }
     }
   `;
 
@@ -353,7 +346,6 @@ export default function SharedTrip() {
     <>
       <style>{css}</style>
       <div className="st-root">
-        <div className="st-stars" />
         <div className="st-orb-1" />
         <div className="st-orb-2" />
 
@@ -371,7 +363,7 @@ export default function SharedTrip() {
           {loading && (
             <div className="st-center">
               <div className="st-spinner" />
-              <p style={{ color:"#334155", fontSize:"14px", fontWeight:600 }}>Loading trip…</p>
+              <p style={{ color:"#94a3b8", fontSize:"14px", fontWeight:600 }}>Loading trip…</p>
             </div>
           )}
 

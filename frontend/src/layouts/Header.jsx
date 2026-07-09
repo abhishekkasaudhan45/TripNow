@@ -56,7 +56,7 @@ function Header() {
   const links = [
     { label: "Home",      path: "/" },
     { label: "Plan Trip", path: "/plan-trip" },
-    { label: "Booking",   path: "/booking" },
+    { label: "Save Trip", path: "/booking" },
     { label: "Dashboard", path: "/dashboard" },
     ...(token && user?.role === "admin" ? [{ label: "Admin", path: "/admin" }] : []),
   ];

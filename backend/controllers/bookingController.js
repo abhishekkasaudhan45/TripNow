@@ -46,7 +46,7 @@ const getMyBookings = async (req, res, next) => {
 // @access  Private
 const getBookingById = async (req, res, next) => {
   try {
-    const trip = await Booking.findById(req.params.id).lean();
+    const trip = await Booking.findOne({ _id: req.params.id, user: req.user._id }).lean();
 
     if (!trip) {
       return res.status(404).json({ success: false, message: "Trip not found" });
@@ -86,8 +86,8 @@ const updateBooking = async (req, res, next) => {
       updates.dayCount = Math.max(1, Math.round((cout - cin) / 86400000));
     }
 
-    const updated = await Booking.findByIdAndUpdate(
-      req.params.id,
+    const updated = await Booking.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
       { $set: updates },
       { new: true, runValidators: true }
     );
@@ -111,7 +111,7 @@ const updateBooking = async (req, res, next) => {
 // @access  Private
 const deleteBooking = async (req, res, next) => {
   try {
-    const deleted = await Booking.findByIdAndDelete(req.params.id);
+    const deleted = await Booking.findOneAndDelete({ _id: req.params.id, user: req.user._id });
 
     if (!deleted) {
       return res.status(404).json({ success: false, message: "Trip not found" });

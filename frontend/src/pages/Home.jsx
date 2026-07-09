@@ -153,7 +153,7 @@ export default function Home() {
             </h1>
           </div>
           <p className="fade-in" style={{ textAlign:"center", fontSize:"18px", color:"#6b7280", maxWidth:"460px", margin:"0 auto 44px", animationDelay:"0.2s" }}>
-            Describe where you want to go — AI builds your perfect itinerary instantly.
+            Your trip, planned in seconds. Tell us where — AI builds your perfect itinerary.
           </p>
 
           <div className="fade-in" style={{ maxWidth:"860px", margin:"0 auto", animationDelay:"0.3s" }}>
