@@ -30,7 +30,8 @@ export const updateTrip = (id, payload) =>
 
 // PUBLIC shared trip (no auth header)
 export const getSharedTrip = async (id) => {
-  const res = await fetch(`http://localhost:5000/api/bookings/shared/${id}`);
+  const base = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const res = await fetch(`${base}/api/bookings/shared/${id}`);
   if (!res.ok) throw new Error("Trip not found");
   return res.json();
 };
