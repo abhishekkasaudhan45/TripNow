@@ -3,11 +3,12 @@ const User = require("../models/User");
 const env = require("../config/env");
 
 const protect = async (req, res, next) => {
-  const isProd = process.env.NODE_ENV === "production";
+  // Suppress debug logging outside local development (production + test runs)
+  const quiet = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "test";
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    if (!isProd) {
+    if (!quiet) {
       console.error("🔴 REJECTED: Missing or malformed Authorization header.");
     }
     return res.status(401).json({
@@ -25,7 +26,7 @@ const protect = async (req, res, next) => {
     req.user = await User.findById(decoded.id).select("-password");
 
     if (!req.user) {
-      if (!isProd) {
+      if (!quiet) {
         console.error("🔴 REJECTED: User associated with this token no longer exists.");
       }
       return res.status(401).json({
@@ -34,13 +35,13 @@ const protect = async (req, res, next) => {
       });
     }
 
-    if (!isProd) {
+    if (!quiet) {
       console.log(`✅ AUTH SUCCESS: Welcome ${req.user.email}`);
     }
     
     next();
   } catch (error) {
-    if (!isProd) {
+    if (!quiet) {
       console.error("🔴 REJECTED (CRASH):", error.message);
     }
     return res.status(401).json({
