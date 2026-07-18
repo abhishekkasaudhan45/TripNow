@@ -79,7 +79,7 @@ Bash
 cd ../frontend
 npm install
 npm run dev
-Open your browser to http://localhost:5173 to view the app!
+Open your browser to http://localhost:5173 to view the app.
 
 🗺️ Roadmap & Upcoming Upgrades
 [ ] Export to PDF & Calendar: Seamless generation of clean PDF itinerary summaries and direct calendar syncing (Google Calendar/iCal).
