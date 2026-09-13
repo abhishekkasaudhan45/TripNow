@@ -8,3 +8,5 @@ frontend/.env
 backend/.env
 npm-debug.log*
 *.log
+
+AGENTS.md

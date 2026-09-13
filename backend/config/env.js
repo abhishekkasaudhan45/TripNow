@@ -1,4 +1,9 @@
 const path = require("path");
+const dns = require("dns");
+
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 require("dotenv").config({
   path: path.resolve(__dirname, "../.env"),
@@ -41,4 +46,6 @@ module.exports = {
   // First allowed origin is treated as the canonical client URL for email links.
   clientUrl: parseAllowedOrigins()[0] || "http://localhost:5173",
   isProduction: process.env.NODE_ENV === "production",
+  geminiApiKey: process.env.GEMINI_API_KEY,
+  geminiModel: process.env.GEMINI_MODEL || "gemini-3.6-flash",
 };

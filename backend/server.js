@@ -3,9 +3,11 @@ const connectDB = require("./config/db");
 const app = require("./app");
 
 
-connectDB();
+const startServer = async () => {
+  await connectDB();
+  app.listen(env.port, () => {
+    console.log(`Server running on port ${env.port}`);
+  });
+};
 
-
-app.listen(env.port, () => {
-  console.log(`Server running on port ${env.port}`);
-});
+startServer();

@@ -7,7 +7,7 @@ const rateLimit = require("express-rate-limit");
 const skipInTest = () => process.env.NODE_ENV === "test";
 
 // 🔴 Strict cap for the AI itinerary endpoint.
-// Guests are still allowed, but capped hard per IP to protect the Groq quota + DB.
+// Guests are still allowed, but capped hard per IP to protect the AI quota + DB.
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,                    // 5 itinerary generations per IP per window

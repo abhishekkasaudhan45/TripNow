@@ -10,4 +10,5 @@ process.env.ADMIN_EMAIL = "admin@test.com";
 process.env.ADMIN_PASSWORD = "AdminPass123";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/placeholder";
 process.env.CLIENT_URL = "http://localhost:5173";
-process.env.GROQ_API_KEY = "test-key";
+process.env.GEMINI_API_KEY = "test-key";
+process.env.GEMINI_MODEL = "gemini-3.6-flash";
