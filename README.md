@@ -2,17 +2,20 @@
 
 An advanced, full-stack AI travel planning web application that generates personalized itineraries in seconds. Built with a sleek glassmorphic user interface, secure token-based authentication, and a robust backend architecture.
 
-🔗 **[Live Demo](https://tripnow.abhishektech.me)** | 🛠️ **Status: Production Ready**
+🔗 **Live Demo:** [https://tripnow.abhishektech.me](https://tripnow.abhishektech.me)  
+🛠️ **Status:** Production Ready
 
 ---
 
 ## ✨ Features
 
-* **🤖 AI Itinerary Generation:** Leverages high-performance AI via the Groq API to construct optimized, day-by-day travel schedules based on user preferences.
-* **🎨 Glassmorphism UI:** A modern, accessible interface built with Tailwind CSS, utilizing smooth gradients, micro-interactions, and custom loading skeletons.
-* **🔒 Secure Authentication:** Complete authentication flow implemented via JSON Web Tokens (JWT) with protected route middleware, role-based admin authorization, and rate-limited auth endpoints.
-* **⚡ Performance Optimized:** Engineered with lazy loading on the frontend (`React.lazy` and `Suspense`) and Gzip compression on the backend Express application.
-* **🎛️ User Dashboard & Admin Panels:** Distinct, protected views for users to manage saved trips and a strict administrative gateway for platform oversight.
+* **🤖 AI Itinerary Generation:** Leverages Google Gemini AI to generate personalized, day-by-day travel itineraries based on destination, budget, and travel dates.
+* **🎨 Glassmorphism UI:** Modern, accessible interface built with Tailwind CSS, featuring smooth gradients, micro-interactions, and custom loading skeletons.
+* **🔒 Secure Authentication:** Complete authentication flow using JSON Web Tokens (JWT), protected routes, role-based admin authorization, and rate-limited endpoints.
+* **⚡ Performance Optimized:** Frontend code-splitting using `React.lazy` and `Suspense`, coupled with Gzip compression on the Express backend.
+* **🎛️ User Dashboard & Admin Panels:** Dedicated protected views for users to manage saved trips and an administrative dashboard for platform management.
+* **💾 Persistent Trip Storage:** Generated itineraries are validated and stored in MongoDB Atlas, allowing users to review their travel plans anytime.
+* **📋 Structured AI Responses:** Strict JSON schema generation providing daily activities, food recommendations, budget breakdowns, travel tips, and accommodation tiers.
 
 ---
 
@@ -30,58 +33,40 @@ An advanced, full-stack AI travel planning web application that generates person
 ![JWT](https://img.shields.io/badge/JWT-black?style=for-the-badge&logo=JSON%20web%20tokens&logoColor=539ee0)
 
 ### AI & Hosting
-![Groq](https://img.shields.io/badge/Groq_API-orange?style=for-the-badge)
+![Google Gemini](https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)
 ![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)
 ![Render](https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)
 
 ---
 
-## 🚀 Getting Started (Local Development)
+## 🚀 Getting Started (Local Setup)
 
-Follow these steps to set up and run the project locally on your machine.
+Follow these steps to configure and run the project locally.
 
 ### Prerequisites
-* Node.js installed (v18+ recommended)
-* MongoDB instance (Local or Atlas)
-* Groq API Key
+* Node.js v18+ installed
+* MongoDB local instance or MongoDB Atlas cluster URI
+* Google AI Studio API key
 
-### 1. Clone the Repository
-```bash
-git clone [https://github.com/ab_kasaudhan/travelx.git](https://github.com/ab_kasaudhan/tripnow.git)
-cd tripnow
-2. Configure Environment Variables
-Copy `backend/.env.example` to `backend/.env` and fill in real values:
+---
 
-Code snippet
+### 1. Configure Environment Variables
+
+Create a `.env` file inside the `backend/` directory:
+
+```env
 NODE_ENV=development
 PORT=5000
+
 MONGO_URI=your_mongodb_connection_string
+
 JWT_SECRET=your_super_secret_jwt_key
 JWT_EXPIRES_IN=2h
+
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=change_me
-GROQ_API_KEY=your_groq_api_key
+
+GEMINI_API_KEY=your_google_ai_studio_api_key
+GEMINI_MODEL=gemini-3.6-flash
+
 CLIENT_URL=http://localhost:5173
-Create a .env file in your frontend directory:
-
-Code snippet
-VITE_API_URL=http://localhost:5000
-3. Install & Run
-Start the Backend Server:
-
-Bash
-cd backend
-npm install
-npm start
-Start the Frontend App:
-
-Bash
-cd ../frontend
-npm install
-npm run dev
-Open your browser to http://localhost:5173 to view the app.
-
-🗺️ Roadmap & Upcoming Upgrades
-[ ] Export to PDF & Calendar: Seamless generation of clean PDF itinerary summaries and direct calendar syncing (Google Calendar/iCal).
-
-[ ] Interactive Map Integration: Embedding custom maps using Leaflet or Mapbox to visually display trip coordinates next to descriptions.
