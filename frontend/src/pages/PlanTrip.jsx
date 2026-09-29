@@ -51,6 +51,15 @@ export default function PlanTrip() {
   const endDate     = state?.checkout    || "";
 
   const [tripData, setTripData]         = useState(null);
+  const [tripId, setTripId]             = useState(state?.tripId || state?.bookingId || state?._id || null);
+  const [activePivotMenu, setActivePivotMenu] = useState(null);
+  const [pivotLoading, setPivotLoading]       = useState({});
+  const [lockLoading, setLockLoading]         = useState({});
+  const [customReasonInput, setCustomReasonInput] = useState("");
+  const [showCustomModal, setShowCustomModal]     = useState(false);
+  const [pivotTarget, setPivotTarget]             = useState(null);
+  const [pivotError, setPivotError]               = useState(null);
+  const [adaptedBadges, setAdaptedBadges]         = useState({});
   const [editMode, setEditMode]         = useState(false);
   const [editableTrip, setEditableTrip] = useState(null);
   const [loading, setLoading]           = useState(true);
@@ -59,6 +68,26 @@ export default function PlanTrip() {
   const [showToast, setShowToast]       = useState(false);
   const [openDays, setOpenDays]         = useState({ 0: true });
   const [activeTab, setActiveTab]       = useState("Itinerary");
+
+  // 🌟 Phase 3: Reality Score State & Fetcher
+  const [realityReport, setRealityReport] = useState(null);
+  const [realityLoading, setRealityLoading] = useState(false);
+  const [showRealityModal, setShowRealityModal] = useState(false);
+
+  const fetchRealityScore = async (idToUse = tripId) => {
+    if (!idToUse) return;
+    try {
+      setRealityLoading(true);
+      const res = await api.post("/api/ai/reality-score", { tripId: idToUse });
+      if (res.data?.success) {
+        setRealityReport(res.data.data);
+      }
+    } catch (err) {
+      console.warn("Reality score fetch skipped:", err?.response?.data?.message || err.message);
+    } finally {
+      setRealityLoading(false);
+    }
+  };
 
   // Day count: derive from the selected dates, but fall back to the number of
   // days the AI actually returned (quick-plan/featured trips have no dates).
@@ -80,6 +109,10 @@ export default function PlanTrip() {
         const raw = res.data.data || "";
         const parsed = parseTripData(raw);
         setTripData(parsed);
+        if (res.data.tripId) {
+          setTripId(res.data.tripId);
+          fetchRealityScore(res.data.tripId);
+        }
         setShowSuccess(true);
 
         setTimeout(() => {
@@ -102,10 +135,179 @@ export default function PlanTrip() {
   }, []);
 
   useEffect(() => {
+    if (tripId && !realityReport && !realityLoading) {
+      fetchRealityScore(tripId);
+    }
+  }, [tripId]);
+
+  useEffect(() => {
     if (tripData) {
       setEditableTrip(JSON.parse(JSON.stringify(tripData)));
     }
   }, [tripData]);
+
+  const handleTriggerPivot = async (dayNumber, block, reason, customText = "") => {
+    const slotKey = `d${dayNumber}-${block}`;
+    if (!tripId) {
+      setPivotError("Trip ID not available. Please save this trip first or refresh.");
+      setTimeout(() => setPivotError(null), 4000);
+      return;
+    }
+
+    try {
+      setPivotLoading((prev) => ({ ...prev, [slotKey]: true }));
+      setActivePivotMenu(null);
+      setShowCustomModal(false);
+      setPivotError(null);
+
+      const payload = {
+        tripId,
+        dayNumber: Number(dayNumber),
+        block,
+        pivotReason: reason,
+      };
+      if (reason === "custom") {
+        payload.customReason = customText || "Custom adaptation requested";
+      }
+
+      const res = await api.post("/api/ai/pivot", payload);
+      const data = res.data?.data;
+
+      if (data?.formattedBlock) {
+        setTripData((prev) => {
+          if (!prev || !prev.days) return prev;
+          const updatedDays = prev.days.map((d) => {
+            if (Number(d.day) === Number(dayNumber)) {
+              const updatedDay = { ...d, [block]: data.formattedBlock };
+              if (Array.isArray(d.activities) && data.replacement) {
+                updatedDay.activities = d.activities.map((a) => {
+                  if (a.period === block || (data.activityId && a.id === data.activityId)) {
+                    return {
+                      ...a,
+                      title: data.replacement.title,
+                      description: data.replacement.description,
+                      category: data.replacement.category,
+                      durationMinutes: data.replacement.estimatedDurationMinutes,
+                      cost: data.replacement.costEstimate,
+                      indoorOutdoor: data.replacement.indoorOutdoor,
+                    };
+                  }
+                  return a;
+                });
+              }
+              return updatedDay;
+            }
+            return d;
+          });
+          return { ...prev, days: updatedDays };
+        });
+
+        const badgeLabels = {
+          rain: "🌧️ Adapted for Rain",
+          low_energy: "🥱 Adapted for Low Energy",
+          budget: "💰 Adapted for Budget",
+          running_late: "⏰ Adapted for Running Late",
+          closed: "🚫 Venue Replaced",
+          custom: "✏️ Custom Adaptation",
+        };
+
+        setAdaptedBadges((prev) => ({
+          ...prev,
+          [slotKey]: badgeLabels[reason] || "⚡ Adapted",
+        }));
+
+        // 🌟 Recalculate Reality Score deterministically after pivot
+        fetchRealityScore(tripId);
+      }
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        "Unable to find a suitable replacement right now. Your original plan was kept.";
+      setPivotError(msg);
+      setTimeout(() => setPivotError(null), 5000);
+    } finally {
+      setPivotLoading((prev) => ({ ...prev, [slotKey]: false }));
+      setCustomReasonInput("");
+      setPivotTarget(null);
+    }
+  };
+
+  const getActivityForSlot = (day, period) => {
+    if (Array.isArray(day?.activities)) {
+      const found = day.activities.find((a) => a.period === period || a.id?.includes(period));
+      if (found) return found;
+    }
+    const defaultId = `d${day?.day || 1}-${period}-01`;
+    const text = day?.[period] || "";
+    const parts = text.includes(" — ") ? text.split(" — ") : text.includes(" - ") ? text.split(" - ") : [text, ""];
+    return {
+      id: defaultId,
+      period,
+      title: parts[0]?.trim() || "Activity",
+      description: parts.slice(1).join(" — ")?.trim() || parts[0]?.trim() || "",
+      category: period === "evening" ? "Dining & Nightlife" : "Sightseeing",
+      durationMinutes: 120,
+      cost: "Moderate",
+      indoorOutdoor: "Mixed",
+      locked: false,
+    };
+  };
+
+  const handleToggleLock = async (dayNumber, period) => {
+    if (!tripId) {
+      setPivotError("Trip ID not available. Please save this trip or refresh.");
+      setTimeout(() => setPivotError(null), 4000);
+      return;
+    }
+
+    const day = tripData?.days?.find((d) => Number(d.day) === Number(dayNumber));
+    if (!day) return;
+
+    const activity = getActivityForSlot(day, period);
+    const activityId = activity.id || `d${dayNumber}-${period}-01`;
+    const newLockedState = !Boolean(activity.locked);
+    const slotKey = `d${dayNumber}-${period}`;
+
+    try {
+      setLockLoading((prev) => ({ ...prev, [slotKey]: true }));
+      setPivotError(null);
+
+      const res = await api.post("/api/ai/activity/lock", {
+        tripId,
+        activityId,
+        locked: newLockedState,
+      });
+
+      if (res.data?.success) {
+        setTripData((prev) => {
+          if (!prev || !prev.days) return prev;
+          const updatedDays = prev.days.map((d) => {
+            if (Number(d.day) === Number(dayNumber)) {
+              let updatedActs = Array.isArray(d.activities) ? [...d.activities] : [];
+              const actIdx = updatedActs.findIndex((a) => a.id === activityId || a.period === period);
+              if (actIdx !== -1) {
+                updatedActs[actIdx] = { ...updatedActs[actIdx], locked: newLockedState };
+              } else {
+                updatedActs.push({ ...activity, locked: newLockedState });
+              }
+              return { ...d, activities: updatedActs };
+            }
+            return d;
+          });
+          return { ...prev, days: updatedDays };
+        });
+
+        // 🌟 Recalculate Reality Score deterministically after lock toggle
+        fetchRealityScore(tripId);
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to update activity lock. Please try again.";
+      setPivotError(msg);
+      setTimeout(() => setPivotError(null), 4000);
+    } finally {
+      setLockLoading((prev) => ({ ...prev, [slotKey]: false }));
+    }
+  };
 
   const toggleDay = (dayKey) =>
     setOpenDays(prev => ({ ...prev, [dayKey]: !prev[dayKey] }));
@@ -217,11 +419,25 @@ export default function PlanTrip() {
         .day-body { border-top:1px solid rgba(0,0,0,0.05); display:none; grid-template-columns:1fr 1fr 1fr; background:rgba(255,255,255,0.5); }
         .day-body.open { display:grid; }
         @media(max-width:768px){ .day-body.open{grid-template-columns:1fr;} }
-        .day-slot { padding:16px; border-right:1px solid rgba(0,0,0,0.05); }
+        .day-slot { padding:16px; border-right:1px solid rgba(0,0,0,0.05); position:relative; }
         .day-slot:last-child { border-right:none; }
-        .slot-label { font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+        .slot-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; position:relative; }
+        .slot-label { font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; display:flex; align-items:center; gap:6px; margin-bottom:0; }
         .slot-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
         .slot-text { font-size:13px; font-weight:500; color:var(--text); line-height:1.6; }
+        .btn-pivot { background:rgba(217,119,6,0.08); border:1px solid rgba(217,119,6,0.25); color:var(--amber-text); border-radius:6px; font-size:11px; font-weight:700; padding:2px 8px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.15s; font-family:var(--font-ui); }
+        .btn-pivot:hover:not(:disabled) { background:rgba(217,119,6,0.18); transform:translateY(-1px); }
+        .btn-pivot:disabled { opacity:0.6; cursor:not-allowed; }
+        .btn-lock { padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:var(--font-ui); transition:all 0.15s; border:1px solid rgba(0,0,0,0.12); background:rgba(255,255,255,0.8); color:var(--muted); }
+        .btn-lock:hover:not(:disabled) { border-color:var(--amber); color:var(--amber-text); }
+        .btn-lock.is-locked { border-color:rgba(217,119,6,0.5); background:rgba(217,119,6,0.12); color:var(--amber-text); }
+        .activity-meta-pill { font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:9999px; display:inline-flex; align-items:center; gap:4px; font-family:var(--font-ui); }
+        .pivot-popover { position:absolute; right:0; top:28px; z-index:30; background:#fff; border:1px solid rgba(0,0,0,0.12); border-radius:10px; box-shadow:0 10px 25px rgba(0,0,0,0.15); padding:6px; width:210px; animation:popIn 0.2s ease-out; }
+        .pivot-option { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:12px; font-weight:600; color:var(--text); cursor:pointer; transition:background 0.15s; }
+        .pivot-option:hover { background:rgba(217,119,6,0.1); color:var(--amber-text); }
+        .pivot-skeleton { background:linear-gradient(90deg,#f0ede6 25%,#faf8f5 50%,#f0ede6 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; height:54px; margin-top:4px; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .adapted-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; background:rgba(5,150,105,0.1); color:var(--emerald-text); border:1px solid rgba(5,150,105,0.25); margin-top:6px; }
 
         .section-head { font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin-bottom:12px; margin-top:8px; }
         .budget-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -248,6 +464,57 @@ export default function PlanTrip() {
           <div className="fixed bottom-6 right-6 z-50 animate-slideUp">
             <div className="bg-emerald-500 text-white px-5 py-3 rounded-lg shadow-xl font-bold flex items-center gap-2">
               💾 Trip saved successfully!
+            </div>
+          </div>
+        )}
+
+        {pivotError && (
+          <div className="fixed top-6 right-6 z-50 animate-slideDown" style={{ maxWidth: "420px" }}>
+            <div style={{ background: "#EF4444", color: "#fff", padding: "12px 18px", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.15)", fontWeight: "600", fontSize: "13px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <span>⚠️</span>
+              <span style={{ flex: 1 }}>{pivotError}</span>
+              <button onClick={() => setPivotError(null)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontWeight: "bold" }}>✕</button>
+            </div>
+          </div>
+        )}
+
+        {showCustomModal && pivotTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }} onClick={() => setShowCustomModal(false)}>
+            <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", width: "90%", maxWidth: "420px", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ fontSize: "18px", fontWeight: "800", color: "var(--text)", marginBottom: "4px" }}>
+                ⚡ Custom Pivot Reason
+              </div>
+              <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "16px" }}>
+                Tell TripNow what changed for Day {pivotTarget.dayNumber} {pivotTarget.block}:
+              </p>
+              <input
+                type="text"
+                placeholder="e.g. Too hot outside, need air conditioning"
+                value={customReasonInput}
+                onChange={(e) => setCustomReasonInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customReasonInput.trim()) {
+                    handleTriggerPivot(pivotTarget.dayNumber, pivotTarget.block, "custom", customReasonInput.trim());
+                  }
+                }}
+                autoFocus
+                style={{ width: "100%", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "14px", outline: "none", fontFamily: "var(--font-ui)", marginBottom: "16px" }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  onClick={() => { setShowCustomModal(false); setCustomReasonInput(""); }}
+                  style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid var(--border)", background: "#fff", fontWeight: "600", fontSize: "13px", cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!customReasonInput.trim()}
+                  onClick={() => handleTriggerPivot(pivotTarget.dayNumber, pivotTarget.block, "custom", customReasonInput.trim())}
+                  style={{ padding: "8px 18px", borderRadius: "8px", border: "none", background: "var(--amber)", color: "#fff", fontWeight: "700", fontSize: "13px", cursor: customReasonInput.trim() ? "pointer" : "not-allowed", opacity: customReasonInput.trim() ? 1 : 0.6 }}
+                >
+                  Adapt Now →
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -381,6 +648,114 @@ export default function PlanTrip() {
 
               {!loading && !showSuccess && !error && tripData && (
                 <>
+                  {/* ── REALITY SCORE BANNER (PHASE 3) ── */}
+                  {realityReport && (
+                    <div style={{
+                      background: "rgba(255, 255, 255, 0.9)",
+                      backdropFilter: "blur(16px)",
+                      borderRadius: "14px",
+                      padding: "16px 20px",
+                      marginBottom: "16px",
+                      border: `1px solid ${realityReport.color || "rgba(16, 185, 129, 0.3)"}`,
+                      boxShadow: "0 4px 20px rgba(0, 0, 0, 0.03)",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                          <div style={{
+                            width: "52px",
+                            height: "52px",
+                            borderRadius: "12px",
+                            background: realityReport.color ? `${realityReport.color}15` : "rgba(16, 185, 129, 0.1)",
+                            color: realityReport.color || "#059669",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            border: `1.5px solid ${realityReport.color || "#059669"}`,
+                            flexShrink: 0,
+                          }}>
+                            <span style={{ fontSize: "20px", fontWeight: "900", lineHeight: "1", fontFamily: "var(--font-ui)" }}>
+                              {realityReport.score}
+                            </span>
+                            <span style={{ fontSize: "9px", fontWeight: "700", opacity: 0.8, textTransform: "uppercase", marginTop: "2px" }}>
+                              Score
+                            </span>
+                          </div>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                              <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--text)" }}>
+                                ⭐ Trip Reality Score
+                              </span>
+                              <span style={{
+                                fontSize: "11px",
+                                fontWeight: "800",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.06em",
+                                padding: "2px 8px",
+                                borderRadius: "4px",
+                                background: realityReport.color ? `${realityReport.color}20` : "rgba(16, 185, 129, 0.15)",
+                                color: realityReport.color || "#059669",
+                              }}>
+                                {realityReport.status}
+                              </span>
+                              {realityLoading && (
+                                <span style={{ fontSize: "11px", color: "var(--dim)" }}>⚡ Recalculating...</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "2px" }}>
+                              Deterministic verification across time windows, activity buffers, budget allowance, and daily workload
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => setShowRealityModal(true)}
+                          style={{
+                            background: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            padding: "7px 16px",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            color: "var(--text)",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          🔍 View Breakdown
+                        </button>
+                      </div>
+
+                      {/* Sub-scores strip */}
+                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginTop: "12px", paddingTop: "12px", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+                        <div style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.03)", color: "var(--muted)", fontWeight: "500" }}>
+                          ⏱️ Time Feasibility: <b style={{ color: "var(--text)" }}>{realityReport.subScores?.timeFeasibility ?? "—"}/100</b>
+                        </div>
+                        <div style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.03)", color: "var(--muted)", fontWeight: "500" }}>
+                          💰 Budget Feasibility: <b style={{ color: "var(--text)" }}>{realityReport.subScores?.budgetFeasibility ?? "—"}/100</b>
+                        </div>
+                        <div style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.03)", color: "var(--muted)", fontWeight: "500" }}>
+                          🏃 Pace: <b style={{ color: "var(--text)" }}>{realityReport.metrics?.paceCategory || "Balanced"}</b>
+                        </div>
+                        <div style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.03)", color: "var(--muted)", fontWeight: "500" }}>
+                          🗺️ Route: <span style={{ color: "var(--dim)" }}>{realityReport.subScores?.routeEfficiency !== null ? `${realityReport.subScores?.routeEfficiency}/100` : "Stage A (Awaiting Coords)"}</span>
+                        </div>
+
+                        {realityReport.issues && realityReport.issues.length > 0 ? (
+                          <div style={{ marginLeft: "auto", fontSize: "11px", color: "#b45309", fontWeight: "600" }}>
+                            ⚠️ {realityReport.issues.length} {realityReport.issues.length === 1 ? "issue" : "issues"} detected
+                          </div>
+                        ) : (
+                          <div style={{ marginLeft: "auto", fontSize: "11px", color: "var(--emerald-text)", fontWeight: "600" }}>
+                            ✨ All constraints verified
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="tabs">
                     {["Itinerary","Map","Budget","Food & Stays","Tips"].map(tab => (
                       <div key={tab} className={`tab ${activeTab === tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>
@@ -440,35 +815,150 @@ export default function PlanTrip() {
                                 { key:"morning",   label:"Morning",   dot:"var(--amber)",  text:"var(--amber-text)" },
                                 { key:"afternoon", label:"Afternoon", dot:"var(--emerald)",text:"var(--emerald-text)" },
                                 { key:"evening",   label:"Evening",   dot:"var(--rose)",   text:"var(--rose)" },
-                              ].map(({ key, label, dot, text }) => (
-                                <div key={key} className="day-slot">
-                                  <div className="slot-label" style={{ color: text }}>
-                                    <div className="slot-dot" style={{ background: dot }} />
-                                    {label}
-                                  </div>
-                                  {editMode ? (
-                                    <textarea
-                                      value={editableTrip?.days[i]?.[key] || ""}
-                                      onChange={(e) => {
-                                        const updated = JSON.parse(JSON.stringify(editableTrip));
-                                        updated.days[i][key] = e.target.value;
-                                        setEditableTrip(updated);
-                                      }}
-                                      style={{ background:"rgba(255,255,255,0.9)", padding:"8px", borderRadius:"6px", width:"100%", border:"1px solid #d1d5db", fontSize:"13px", minHeight:"80px", outline:"none", resize:"vertical", fontFamily:"var(--font-ui)" }}
-                                    />
-                                  ) : (
-                                    <div className="slot-text">{safeString(day[key])}</div>
-                                  )}
-                                  {!editMode && key === "evening" && day.food?.length > 0 && (
-                                    <div style={{ marginTop:"12px", padding:"10px", background:"rgba(245,158,11,0.1)", borderRadius:"6px", border:"1px solid rgba(245,158,11,0.2)" }}>
-                                      <b style={{ fontSize:"10px", color:"var(--amber-text)", textTransform:"uppercase", letterSpacing:"0.05em" }}>🍽️ Evening Eats:</b>
-                                      {day.food.map((f, fi) => (
-                                        <div key={fi} style={{ fontSize:"12px", color:"var(--text)", marginTop:"4px", fontWeight:"500" }}>• {safeString(f)}</div>
-                                      ))}
+                              ].map(({ key, label, dot, text }) => {
+                                const slotKey = `d${day.day}-${key}`;
+                                const isLoading = Boolean(pivotLoading[slotKey]);
+                                const isMenuOpen = activePivotMenu === slotKey;
+                                const activity = getActivityForSlot(day, key);
+                                const isLocked = Boolean(activity?.locked);
+                                const isLocking = Boolean(lockLoading[slotKey]);
+
+                                return (
+                                  <div key={key} className="day-slot">
+                                    <div className="slot-header">
+                                      <div className="slot-label" style={{ color: text }}>
+                                        <div className="slot-dot" style={{ background: dot }} />
+                                        {label}
+                                      </div>
+                                      {!editMode && (
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                          <button
+                                            className={`btn-lock ${isLocked ? "is-locked" : ""}`}
+                                            disabled={isLocking}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleToggleLock(day.day, key);
+                                            }}
+                                            title={isLocked ? "Activity is locked. Click to unlock." : "Lock activity to prevent modifications"}
+                                          >
+                                            {isLocking ? "⏳" : isLocked ? "🔒 Locked" : "🔓 Lock"}
+                                          </button>
+
+                                          <div style={{ position: "relative" }}>
+                                            <button
+                                              className="btn-pivot"
+                                              disabled={isLoading || isLocked}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!isLocked) {
+                                                  setActivePivotMenu(isMenuOpen ? null : slotKey);
+                                                }
+                                              }}
+                                              title={isLocked ? "Activity is locked. Unlock it to adapt or replace." : "Adapt this activity when reality changes"}
+                                              style={isLocked ? { opacity: 0.5, cursor: "not-allowed", borderStyle: "dashed" } : {}}
+                                            >
+                                              {isLoading ? "⏳ Adapting..." : "⚡ Pivot"}
+                                            </button>
+
+                                            {isMenuOpen && !isLocked && (
+                                              <div className="pivot-popover" onClick={(e) => e.stopPropagation()}>
+                                                <div style={{ fontSize: "11px", fontWeight: "800", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 8px 6px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                                                  ⚡ What Changed?
+                                                </div>
+                                                {[
+                                                  { id: "rain", label: "🌧️ Rain", desc: "Bad weather" },
+                                                  { id: "low_energy", label: "🥱 Low energy", desc: "Need to relax" },
+                                                  { id: "budget", label: "💰 Budget", desc: "Free / cheap" },
+                                                  { id: "running_late", label: "⏰ Running late", desc: "Short on time" },
+                                                  { id: "closed", label: "🚫 Closed", desc: "Venue shut" },
+                                                ].map(opt => (
+                                                  <div
+                                                    key={opt.id}
+                                                    className="pivot-option"
+                                                    onClick={() => handleTriggerPivot(day.day, key, opt.id)}
+                                                  >
+                                                    <span>{opt.label}</span>
+                                                    <span style={{ fontSize: "10px", color: "var(--dim)", marginLeft: "auto" }}>{opt.desc}</span>
+                                                  </div>
+                                                ))}
+                                                <div
+                                                  className="pivot-option"
+                                                  style={{ borderTop: "1px solid rgba(0,0,0,0.06)", marginTop: "4px" }}
+                                                  onClick={() => {
+                                                    setPivotTarget({ dayNumber: day.day, block: key });
+                                                    setShowCustomModal(true);
+                                                    setActivePivotMenu(null);
+                                                  }}
+                                                >
+                                                  <span>✏️ Other...</span>
+                                                  <span style={{ fontSize: "10px", color: "var(--dim)", marginLeft: "auto" }}>Custom</span>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
-                              ))}
+                                    {editMode ? (
+                                      <textarea
+                                        value={editableTrip?.days[i]?.[key] || ""}
+                                        onChange={(e) => {
+                                          const updated = JSON.parse(JSON.stringify(editableTrip));
+                                          updated.days[i][key] = e.target.value;
+                                          setEditableTrip(updated);
+                                        }}
+                                        style={{ background:"rgba(255,255,255,0.9)", padding:"8px", borderRadius:"6px", width:"100%", border:"1px solid #d1d5db", fontSize:"13px", minHeight:"80px", outline:"none", resize:"vertical", fontFamily:"var(--font-ui)" }}
+                                      />
+                                    ) : isLoading ? (
+                                      <div>
+                                        <div className="pivot-skeleton" />
+                                        <div style={{ fontSize:"11px", color:"var(--amber-text)", marginTop:"6px", fontWeight:"600" }}>
+                                          ⚡ Adapting with AI...
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <div className="slot-text">{safeString(day[key])}</div>
+                                        {activity && (
+                                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                                            {activity.category && (
+                                              <span className="activity-meta-pill" style={{ background: "rgba(217, 119, 6, 0.08)", color: "#b45309" }}>
+                                                🏷️ {activity.category}
+                                              </span>
+                                            )}
+                                            {activity.durationMinutes && (
+                                              <span className="activity-meta-pill" style={{ background: "rgba(5, 150, 105, 0.08)", color: "#047857" }}>
+                                                ⏱️ {activity.durationMinutes}m
+                                              </span>
+                                            )}
+                                            {activity.indoorOutdoor && (
+                                              <span className="activity-meta-pill" style={{ background: "rgba(79, 70, 229, 0.08)", color: "#4338ca" }}>
+                                                {activity.indoorOutdoor === "Indoor" ? "🏠 Indoor" : activity.indoorOutdoor === "Outdoor" ? "☀️ Outdoor" : "⛅ Mixed"}
+                                              </span>
+                                            )}
+                                            {activity.cost && (
+                                              <span className="activity-meta-pill" style={{ background: "rgba(107, 114, 128, 0.08)", color: "#374151" }}>
+                                                💰 {activity.cost}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                        {adaptedBadges[slotKey] && (
+                                          <div className="adapted-badge">{adaptedBadges[slotKey]}</div>
+                                        )}
+                                      </>
+                                    )}
+                                    {!editMode && key === "evening" && day.food?.length > 0 && (
+                                      <div style={{ marginTop:"12px", padding:"10px", background:"rgba(245,158,11,0.1)", borderRadius:"6px", border:"1px solid rgba(245,158,11,0.2)" }}>
+                                        <b style={{ fontSize:"10px", color:"var(--amber-text)", textTransform:"uppercase", letterSpacing:"0.05em" }}>🍽️ Evening Eats:</b>
+                                        {day.food.map((f, fi) => (
+                                          <div key={fi} style={{ fontSize:"12px", color:"var(--text)", marginTop:"4px", fontWeight:"500" }}>• {safeString(f)}</div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         ))}
@@ -551,6 +1041,330 @@ export default function PlanTrip() {
           </div>
         </div>
       </div>
+
+      {/* ── REALITY SCORE DETAILS MODAL (PHASE 3) ── */}
+      {showRealityModal && realityReport && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(0, 0, 0, 0.4)",
+            backdropFilter: "blur(6px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+          onClick={() => setShowRealityModal(false)}
+        >
+          <div
+            style={{
+              background: "#FFFFFF",
+              borderRadius: "16px",
+              width: "100%",
+              maxWidth: "600px",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              boxShadow: "0 25px 50px rgba(0,0,0,0.15)",
+              border: "1px solid rgba(0,0,0,0.08)",
+              padding: "24px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", borderBottom: "1px solid rgba(0,0,0,0.06)", paddingBottom: "12px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "800", color: "var(--text)" }}>
+                  ⭐ Reality Verification Breakdown
+                </h3>
+                <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--muted)" }}>
+                  Deterministic evaluation by TripNow Reality Engine
+                </p>
+              </div>
+              <button
+                onClick={() => setShowRealityModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "18px",
+                  color: "var(--muted)",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Score Header */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: realityReport.color ? `${realityReport.color}10` : "rgba(16, 185, 129, 0.08)",
+              padding: "16px",
+              borderRadius: "12px",
+              border: `1px solid ${realityReport.color || "#059669"}30`,
+              marginBottom: "20px",
+            }}>
+              <div>
+                <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>
+                  Overall Reality Score
+                </span>
+                <div style={{ fontSize: "32px", fontWeight: "900", color: realityReport.color || "var(--emerald-text)" }}>
+                  {realityReport.score} <span style={{ fontSize: "18px", fontWeight: "600", color: "var(--muted)" }}>/ 100</span>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{
+                  fontSize: "12px",
+                  fontWeight: "800",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  padding: "4px 12px",
+                  borderRadius: "6px",
+                  background: realityReport.color || "#059669",
+                  color: "#FFFFFF",
+                }}>
+                  {realityReport.status}
+                </span>
+                <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "6px" }}>
+                  {realityReport.metrics?.lockedActivityCount || 0} Locked {(realityReport.metrics?.lockedActivityCount === 1) ? "Anchor" : "Anchors"}
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-scores Breakdown */}
+            <div style={{ marginBottom: "20px" }}>
+              <h4 style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "12px" }}>
+                Sub-Score Analysis
+              </h4>
+              <div style={{ display: "grid", gap: "10px" }}>
+                <div style={{ background: "rgba(0,0,0,0.02)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>
+                    <span>⏱️ Time Feasibility</span>
+                    <span style={{ color: "var(--text)" }}>{realityReport.subScores?.timeFeasibility ?? "—"}/100</span>
+                  </div>
+                  <div style={{ height: "6px", background: "rgba(0,0,0,0.06)", borderRadius: "3px", overflow: "hidden" }}>
+                    <div style={{ width: `${realityReport.subScores?.timeFeasibility || 0}%`, height: "100%", background: "#059669", borderRadius: "3px" }} />
+                  </div>
+                </div>
+
+                <div style={{ background: "rgba(0,0,0,0.02)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>
+                    <span>💰 Budget Feasibility</span>
+                    <span style={{ color: "var(--text)" }}>{realityReport.subScores?.budgetFeasibility ?? "—"}/100</span>
+                  </div>
+                  <div style={{ height: "6px", background: "rgba(0,0,0,0.06)", borderRadius: "3px", overflow: "hidden" }}>
+                    <div style={{ width: `${realityReport.subScores?.budgetFeasibility || 0}%`, height: "100%", background: "#10B981", borderRadius: "3px" }} />
+                  </div>
+                </div>
+
+                <div style={{ background: "rgba(0,0,0,0.02)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>
+                    <span>🏃 Pacing & Daily Load ({realityReport.metrics?.paceCategory || "Balanced"})</span>
+                    <span style={{ color: "var(--text)" }}>{realityReport.subScores?.activityLoad ?? "—"}/100</span>
+                  </div>
+                  <div style={{ height: "6px", background: "rgba(0,0,0,0.06)", borderRadius: "3px", overflow: "hidden" }}>
+                    <div style={{ width: `${realityReport.subScores?.activityLoad || 0}%`, height: "100%", background: "#D97706", borderRadius: "3px" }} />
+                  </div>
+                </div>
+
+                <div style={{ background: "rgba(0,0,0,0.02)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.04)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>
+                    <span>🗺️ Route & Distance Efficiency</span>
+                    <span style={{ color: "var(--muted)", fontSize: "12px" }}>
+                      {realityReport.subScores?.routeEfficiency !== null ? `${realityReport.subScores?.routeEfficiency}/100` : "Stage A (Awaiting Coords)"}
+                    </span>
+                  </div>
+                  <div style={{ height: "6px", background: "rgba(0,0,0,0.06)", borderRadius: "3px", overflow: "hidden" }}>
+                    <div style={{ width: realityReport.subScores?.routeEfficiency ? `${realityReport.subScores.routeEfficiency}%` : "100%", height: "100%", background: "rgba(0,0,0,0.15)", borderRadius: "3px" }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Detected Issues */}
+            <div>
+              <h4 style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "12px" }}>
+                Friction Warnings & Feasibility Issues ({realityReport.issues?.length || 0})
+              </h4>
+              {(!realityReport.issues || realityReport.issues.length === 0) ? (
+                <div style={{ padding: "14px", background: "rgba(16, 185, 129, 0.08)", borderRadius: "8px", color: "var(--emerald-text)", fontSize: "13px", fontWeight: "500" }}>
+                  ✨ No feasibility issues detected. Your itinerary has comfortable buffers, balanced pacing, and realistic costs.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {realityReport.issues.map((iss, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: "8px",
+                        background: iss.severity === "high" ? "rgba(225, 29, 72, 0.06)" : "rgba(245, 158, 11, 0.08)",
+                        border: `1px solid ${iss.severity === "high" ? "rgba(225, 29, 72, 0.2)" : "rgba(245, 158, 11, 0.2)"}`,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{
+                          fontSize: "10px",
+                          fontWeight: "800",
+                          textTransform: "uppercase",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          background: iss.severity === "high" ? "var(--rose)" : "var(--amber)",
+                          color: "#FFFFFF",
+                        }}>
+                          {iss.severity}
+                        </span>
+                        {iss.day && (
+                          <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--muted)" }}>
+                            Day {iss.day} {iss.period ? `· ${iss.period}` : ""}
+                          </span>
+                        )}
+                        {iss.isLocked && (
+                          <span style={{
+                            fontSize: "10px",
+                            fontWeight: "700",
+                            background: "rgba(0,0,0,0.08)",
+                            color: "var(--text)",
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            marginLeft: "auto",
+                          }}>
+                            🔒 Locked Anchor
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "var(--text)", lineHeight: "1.5" }}>
+                        {iss.message}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: "20px", textAlign: "right" }}>
+              <button
+                onClick={() => setShowRealityModal(false)}
+                style={{
+                  background: "var(--text)",
+                  color: "#FFFFFF",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "8px 20px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-ui)",
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CUSTOM REASON MODAL ── */}
+      {showCustomModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(0, 0, 0, 0.4)",
+            backdropFilter: "blur(4px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+          onClick={() => setShowCustomModal(false)}
+        >
+          <div
+            style={{
+              background: "#FFFFFF",
+              borderRadius: "14px",
+              width: "100%",
+              maxWidth: "460px",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+              border: "1px solid rgba(0,0,0,0.08)",
+              padding: "20px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: "700", color: "var(--text)" }}>
+              ✏️ Custom Pivot Reason
+            </h3>
+            <p style={{ margin: "0 0 14px", fontSize: "12px", color: "var(--muted)" }}>
+              Describe what changed (e.g., "Too hot outside", "Need kid-friendly place")
+            </p>
+            <textarea
+              value={customReasonInput}
+              onChange={(e) => setCustomReasonInput(e.target.value)}
+              placeholder="Enter reason..."
+              style={{
+                width: "100%",
+                minHeight: "80px",
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid var(--border)",
+                fontSize: "13px",
+                fontFamily: "var(--font-ui)",
+                resize: "vertical",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "14px" }}>
+              <button
+                onClick={() => setShowCustomModal(false)}
+                style={{
+                  background: "none",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  padding: "8px 14px",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (pivotTarget) {
+                    handleTriggerPivot(pivotTarget.dayNumber, pivotTarget.block, "custom", customReasonInput);
+                  }
+                }}
+                disabled={!customReasonInput.trim()}
+                style={{
+                  background: "var(--amber)",
+                  color: "#FFFFFF",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  cursor: customReasonInput.trim() ? "pointer" : "not-allowed",
+                  fontWeight: "700",
+                  opacity: customReasonInput.trim() ? 1 : 0.6,
+                }}
+              >
+                Adapt Now →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

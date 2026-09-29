@@ -281,8 +281,186 @@ Ensure each day includes specific morning, afternoon, evening activities, and re
   }
 };
 
+const { executePivot, PivotError } = require("../services/pivotService");
+const { toggleActivityLock } = require("../services/lockService");
+
+const pivotAITrip = async (req, res) => {
+  try {
+    const { tripId, dayNumber, block, activityId, pivotReason, customReason } = req.body;
+    const user = req.user;
+
+    const result = await executePivot({
+      tripId,
+      dayNumber,
+      block,
+      activityId,
+      pivotReason,
+      customReason,
+      user,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof PivotError || error.statusCode) {
+      const status = error.statusCode || 500;
+      return res.status(status).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    return handleGeminiError(error, res);
+  }
+};
+
+const lockActivity = async (req, res) => {
+  try {
+    const { tripId, activityId, locked } = req.body;
+    const user = req.user;
+
+    const result = await toggleActivityLock({
+      tripId,
+      activityId,
+      locked,
+      user,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof PivotError || error.statusCode) {
+      const status = error.statusCode || 500;
+      return res.status(status).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    return handleGeminiError(error, res);
+  }
+};
+
+const { evaluateTripReality } = require("../services/realityEngine");
+
+const getRealityScore = async (req, res) => {
+  try {
+    const { tripId } = req.body;
+    const user = req.user;
+
+    const trip = await Booking.findById(tripId);
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    // Ownership verification: If the trip belongs to a user, caller must match
+    if (trip.user) {
+      const callerId = user?._id ? user._id.toString() : null;
+      if (!callerId || trip.user.toString() !== callerId) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not authorized to access this trip's reality score",
+        });
+      }
+    }
+
+    const report = evaluateTripReality(trip);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        tripId: trip._id.toString(),
+        ...report,
+      },
+    });
+  } catch (error) {
+    console.error("🔒 Reality Engine Error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while evaluating trip reality score",
+    });
+  }
+};
+
+const { previewFixDay, applyFixDay, FixDayError } = require("../services/fixDayService");
+
+const previewFixDayTrip = async (req, res) => {
+  try {
+    const { tripId, dayNumber, reason, currentPeriod, delayMinutes, customReason } = req.body;
+    const user = req.user;
+
+    const result = await previewFixDay({
+      tripId,
+      dayNumber,
+      reason,
+      currentPeriod,
+      delayMinutes,
+      customReason,
+      user,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof FixDayError || error.statusCode) {
+      const status = error.statusCode || 500;
+      return res.status(status).json({
+        success: false,
+        code: error.code || "INTERNAL_ERROR",
+        message: error.message,
+      });
+    }
+
+    return handleGeminiError(error, res);
+  }
+};
+
+const applyFixDayTrip = async (req, res) => {
+  try {
+    const { tripId, dayNumber, proposalToken } = req.body;
+    const user = req.user;
+
+    const result = await applyFixDay({
+      tripId,
+      dayNumber,
+      proposalToken,
+      user,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof FixDayError || error.statusCode) {
+      const status = error.statusCode || 500;
+      return res.status(status).json({
+        success: false,
+        code: error.code || "INTERNAL_ERROR",
+        message: error.message,
+      });
+    }
+
+    return handleGeminiError(error, res);
+  }
+};
+
 module.exports = {
   generateAITrip,
+  pivotAITrip,
+  lockActivity,
+  getRealityScore,
+  previewFixDayTrip,
+  applyFixDayTrip,
   validateItinerary,
   itinerarySchema,
   handleGeminiError,

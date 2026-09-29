@@ -15,6 +15,7 @@ const requiredVariables = [
   "JWT_SECRET",
   "ADMIN_PASSWORD",
   "ADMIN_EMAIL",
+  ...(process.env.NODE_ENV === "production" ? ["FIX_DAY_PROPOSAL_SECRET"] : []),
 ];
 const missingVariables = requiredVariables.filter(
   (variableName) => !process.env[variableName]
@@ -48,4 +49,9 @@ module.exports = {
   isProduction: process.env.NODE_ENV === "production",
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || "gemini-3.6-flash",
+  fixDayProposalSecret:
+    process.env.FIX_DAY_PROPOSAL_SECRET ||
+    (process.env.NODE_ENV === "production"
+      ? undefined
+      : "dev_fix_day_proposal_secret_key_32bytes_minimum_safe"),
 };
