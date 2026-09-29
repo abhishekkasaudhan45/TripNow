@@ -74,6 +74,18 @@ export default function PlanTrip() {
   const [realityLoading, setRealityLoading] = useState(false);
   const [showRealityModal, setShowRealityModal] = useState(false);
 
+  // 🛠️ Phase 4: Fix My Day State (day-level adaptive rebalancing)
+  const [showFixDayModal, setShowFixDayModal]       = useState(false);
+  const [fixDayTarget, setFixDayTarget]             = useState(null); // { dayNumber }
+  const [fixDayReason, setFixDayReason]             = useState("schedule_overload");
+  const [fixDayCurrentPeriod, setFixDayCurrentPeriod] = useState("morning");
+  const [fixDayDelay, setFixDayDelay]               = useState(30);
+  const [fixDayCustom, setFixDayCustom]             = useState("");
+  const [fixDayPreview, setFixDayPreview]           = useState(null); // full server proposal
+  const [fixDayLoading, setFixDayLoading]           = useState(false);
+  const [fixDayApplying, setFixDayApplying]         = useState(false);
+  const [fixDayError, setFixDayError]               = useState(null); // in-modal error (banner is hidden behind modal)
+
   const fetchRealityScore = async (idToUse = tripId) => {
     if (!idToUse) return;
     try {
@@ -309,6 +321,180 @@ export default function PlanTrip() {
     }
   };
 
+  // ─────────────── Phase 4: Fix My Day ───────────────
+  const getFixDayEligibility = (day) => {
+    let activities = [];
+    if (Array.isArray(day?.activities) && day.activities.length > 0) {
+      // Use the authoritative structured model directly — it mirrors the
+      // backend normalizer, which allows >3 activities and multiple per period.
+      activities = day.activities;
+    } else {
+      // Legacy fallback: one activity per populated period block.
+      activities = ["morning", "afternoon", "evening"]
+        .map((p) => {
+          const text = day?.[p];
+          return typeof text === "string" && text.trim().length > 0
+            ? getActivityForSlot(day, p)
+            : null;
+        })
+        .filter(Boolean);
+    }
+    const unlockedCount = activities.filter((a) => !a.locked).length;
+    if (activities.length < 2) {
+      return { eligible: false, reason: "Fix My Day needs at least 2 activities on this day." };
+    }
+    if (unlockedCount === 0) {
+      return { eligible: false, reason: "All activities are locked. Unlock one to use Fix My Day." };
+    }
+    return { eligible: true, reason: "Rebalance this day when plans change" };
+  };
+
+  const isFixDayFormValid = () => {
+    if (fixDayReason === "running_late") {
+      const d = Number(fixDayDelay);
+      return (fixDayCurrentPeriod === "morning" || fixDayCurrentPeriod === "afternoon") &&
+        Number.isInteger(d) && d >= 15 && d <= 240;
+    }
+    if (fixDayReason === "custom") {
+      const t = (fixDayCustom || "").trim();
+      return t.length > 0 && t.length <= 300;
+    }
+    return true; // schedule_overload requires no extra fields
+  };
+
+  const closeFixDayModal = () => {
+    setShowFixDayModal(false);
+    setFixDayTarget(null);
+    setFixDayReason("schedule_overload");
+    setFixDayCurrentPeriod("morning");
+    setFixDayDelay(30);
+    setFixDayCustom("");
+    setFixDayPreview(null);
+    setFixDayError(null);
+    setFixDayLoading(false);
+    setFixDayApplying(false);
+  };
+  // FIXDAY_HANDLERS_OPEN
+  const openFixDayModal = (day) => {
+    if (!tripId) {
+      setPivotError("Trip ID not available. Please save this trip or refresh.");
+      setTimeout(() => setPivotError(null), 4000);
+      return;
+    }
+    setFixDayTarget({ dayNumber: Number(day.day) });
+    setFixDayReason("schedule_overload");
+    setFixDayCurrentPeriod("morning");
+    setFixDayDelay(30);
+    setFixDayCustom("");
+    setFixDayPreview(null);
+    setFixDayError(null);
+    setShowFixDayModal(true);
+  };
+
+  const handleFixDayFailure = (err) => {
+    const status = err?.response?.status;
+    const backendMsg = err?.response?.data?.message;
+    // 403/404 close the modal and surface via the global banner
+    if (status === 403 || status === 404) {
+      closeFixDayModal();
+      setPivotError(backendMsg || (status === 403
+        ? "You're not authorized to modify this trip."
+        : "This trip or day is no longer available."));
+      setTimeout(() => setPivotError(null), 5000);
+      return;
+    }
+    // Everything else keeps the modal open (its backdrop hides the banner)
+    if (status === 400) {
+      setFixDayPreview(null);
+      setFixDayError("This request was invalid or the proposal is no longer valid. Please generate a new preview.");
+    } else if (status === 409) {
+      setFixDayPreview(null);
+      setFixDayError("Your itinerary changed after this preview. Generate a new preview.");
+    } else if (status === 410) {
+      setFixDayPreview(null);
+      setFixDayError("This preview expired. Generate a new preview.");
+    } else if (status === 422) {
+      setFixDayError(backendMsg || "This day can't be adapted for that reason.");
+    } else if (status === 423) {
+      setFixDayError(backendMsg || "A locked activity prevents this change. Unlock it or choose another day.");
+    } else if (status === 429) {
+      setFixDayError(backendMsg || "Too many requests right now. Please wait a moment and try again.");
+    } else if (status === 502) {
+      setFixDayError("Couldn't generate a valid alternative. Your plan is unchanged.");
+    } else if (status === 504) {
+      setFixDayError("The AI service timed out. Please try again.");
+    } else {
+      setFixDayError(backendMsg || "Something went wrong. Your plan is unchanged.");
+    }
+  };
+  // FIXDAY_HANDLERS_ASYNC
+  const handleFixDayPreview = async () => {
+    if (!tripId || !fixDayTarget) {
+      setFixDayError("Trip ID not available. Please save this trip or refresh.");
+      return;
+    }
+    const dayNumber = Number(fixDayTarget.dayNumber);
+    const payload = { tripId, dayNumber, reason: fixDayReason };
+    if (fixDayReason === "running_late") {
+      payload.currentPeriod = fixDayCurrentPeriod;
+      payload.delayMinutes = Number(fixDayDelay);
+    } else if (fixDayReason === "custom") {
+      payload.customReason = (fixDayCustom || "").trim();
+    }
+    try {
+      setFixDayLoading(true);
+      setFixDayError(null);
+      const res = await api.post("/api/ai/fix-day/preview", payload);
+      if (res.data?.success) {
+        setFixDayPreview(res.data.data); // store the entire server proposal
+      } else {
+        setFixDayError("Unable to generate a preview. Please try again.");
+      }
+    } catch (err) {
+      handleFixDayFailure(err);
+    } finally {
+      setFixDayLoading(false);
+    }
+  };
+  // FIXDAY_HANDLERS_APPLY
+  const handleFixDayApply = async () => {
+    if (!tripId || !fixDayTarget || !fixDayPreview?.proposalToken) return;
+    const dayNumber = Number(fixDayTarget.dayNumber);
+    try {
+      setFixDayApplying(true);
+      setFixDayError(null);
+      // Apply sends ONLY the signed token — never replacement content.
+      const res = await api.post("/api/ai/fix-day/apply", {
+        tripId,
+        dayNumber,
+        proposalToken: fixDayPreview.proposalToken,
+      });
+      if (res.data?.success) {
+        const data = res.data.data;
+        setTripData((prev) => {
+          if (!prev || !Array.isArray(prev.days)) return prev;
+          // Match by day number, NEVER by array index.
+          const updatedDays = prev.days.map((d) =>
+            Number(d.day) === Number(data.dayNumber) ? data.updatedDay : d
+          );
+          return { ...prev, days: updatedDays };
+        });
+        // Use the authoritative report returned by apply (no second request).
+        if (data.realityReport) setRealityReport(data.realityReport);
+        setAdaptedBadges((prev) => ({ ...prev, [`fixday-d${data.dayNumber}`]: "🛠️ Day Rebalanced" }));
+        closeFixDayModal();
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 2000);
+      } else {
+        setFixDayError("Apply failed. Please try again.");
+      }
+    } catch (err) {
+      handleFixDayFailure(err);
+    } finally {
+      setFixDayApplying(false);
+    }
+  };
+
   const toggleDay = (dayKey) =>
     setOpenDays(prev => ({ ...prev, [dayKey]: !prev[dayKey] }));
 
@@ -438,6 +624,16 @@ export default function PlanTrip() {
         .pivot-skeleton { background:linear-gradient(90deg,#f0ede6 25%,#faf8f5 50%,#f0ede6 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; height:54px; margin-top:4px; }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         .adapted-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; background:rgba(5,150,105,0.1); color:var(--emerald-text); border:1px solid rgba(5,150,105,0.25); margin-top:6px; }
+
+        /* Phase 4: Fix My Day (day-level action) */
+        .btn-fixday { background:rgba(217,119,6,0.08); border:1px solid rgba(217,119,6,0.25); color:var(--amber-text); border-radius:8px; font-size:12px; font-weight:700; padding:6px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all 0.15s; font-family:var(--font-ui); margin-right:12px; white-space:nowrap; }
+        .btn-fixday:hover:not(:disabled) { background:rgba(217,119,6,0.18); transform:translateY(-1px); }
+        .btn-fixday:disabled { cursor:not-allowed; opacity:0.5; }
+        .fixday-reason { display:flex; flex-direction:column; gap:2px; padding:12px 14px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,0.9); cursor:pointer; transition:all 0.15s; text-align:left; }
+        .fixday-reason.active { border-color:var(--amber); background:var(--amber-dim); }
+        .fixday-slot { border:1px solid rgba(0,0,0,0.06); border-radius:10px; padding:12px 14px; background:rgba(0,0,0,0.02); }
+        .fixday-slot.replaced { border-color:rgba(16,185,129,0.4); background:rgba(16,185,129,0.06); }
+        .fixday-slot.readonly { opacity:0.85; }
 
         .section-head { font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin-bottom:12px; margin-top:8px; }
         .budget-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -807,6 +1003,22 @@ export default function PlanTrip() {
                                   <div className="day-title">{safeString(day.title) || `Exploring ${destination}`}</div>
                                 )}
                               </div>
+                              {!editMode && (() => {
+                                const elig = getFixDayEligibility(day);
+                                return (
+                                  <button
+                                    className="btn-fixday"
+                                    disabled={!elig.eligible}
+                                    title={elig.reason}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (elig.eligible) openFixDayModal(day);
+                                    }}
+                                  >
+                                    🛠️ Fix My Day
+                                  </button>
+                                );
+                              })()}
                               <div className={`day-chevron ${openDays[i] ? "open" : ""}`}>▾</div>
                             </div>
 
@@ -1267,6 +1479,257 @@ export default function PlanTrip() {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── FIX MY DAY MODAL (PHASE 4) ── */}
+      {showFixDayModal && (
+        <div
+          style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", background:"rgba(0,0,0,0.4)", backdropFilter:"blur(6px)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}
+          onClick={() => { if (!fixDayLoading && !fixDayApplying) closeFixDayModal(); }}
+        >
+          <div
+            style={{ background:"#FFFFFF", borderRadius:"16px", width:"100%", maxWidth:"600px", maxHeight:"85vh", overflowY:"auto", boxShadow:"0 25px 50px rgba(0,0,0,0.15)", border:"1px solid rgba(0,0,0,0.08)", padding:"24px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px", borderBottom:"1px solid rgba(0,0,0,0.06)", paddingBottom:"12px" }}>
+              <div>
+                <h3 style={{ margin:0, fontSize:"18px", fontWeight:"800", color:"var(--text)" }}>
+                  🛠️ Fix My Day{fixDayTarget ? ` · Day ${fixDayTarget.dayNumber}` : ""}
+                </h3>
+                <p style={{ margin:"4px 0 0", fontSize:"12px", color:"var(--muted)" }}>
+                  {fixDayPreview ? "Review the proposed change before applying" : "Tell TripNow what changed — it will rebalance this day"}
+                </p>
+              </div>
+              <button
+                onClick={() => { if (!fixDayLoading && !fixDayApplying) closeFixDayModal(); }}
+                style={{ background:"none", border:"none", fontSize:"18px", color:"var(--muted)", cursor:"pointer", padding:"4px 8px", borderRadius:"4px" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {fixDayError && (
+              <div style={{ marginBottom:"16px", padding:"10px 14px", borderRadius:"8px", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#b91c1c", fontSize:"12px", fontWeight:"600" }}>
+                ⚠️ {fixDayError}
+              </div>
+            )}
+
+            {/* FIXDAY_STEP1 */}
+            {!fixDayPreview && (
+              <div>
+                <div style={{ fontSize:"11px", fontWeight:"800", color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"10px" }}>
+                  What changed?
+                </div>
+                <div style={{ display:"grid", gap:"8px", marginBottom:"16px" }}>
+                  {[
+                    { id:"schedule_overload", label:"📆 Schedule Overload", desc:"Too much packed into this day" },
+                    { id:"running_late", label:"⏰ Running Late", desc:"Behind schedule right now" },
+                    { id:"custom", label:"✏️ Custom", desc:"Describe your own situation" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`fixday-reason ${fixDayReason === opt.id ? "active" : ""}`}
+                      onClick={() => { setFixDayReason(opt.id); setFixDayError(null); }}
+                    >
+                      <span style={{ fontSize:"13px", fontWeight:"700", color:"var(--text)" }}>{opt.label}</span>
+                      <span style={{ fontSize:"11px", color:"var(--muted)" }}>{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {fixDayReason === "running_late" && (
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"16px" }}>
+                    <div>
+                      <label style={{ fontSize:"11px", fontWeight:"700", color:"var(--muted)", display:"block", marginBottom:"6px" }}>Current period</label>
+                      <select
+                        value={fixDayCurrentPeriod}
+                        onChange={(e) => setFixDayCurrentPeriod(e.target.value)}
+                        style={{ width:"100%", padding:"9px 10px", border:"1px solid var(--border)", borderRadius:"8px", fontSize:"13px", fontFamily:"var(--font-ui)", outline:"none", background:"#fff" }}
+                      >
+                        <option value="morning">Morning</option>
+                        <option value="afternoon">Afternoon</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize:"11px", fontWeight:"700", color:"var(--muted)", display:"block", marginBottom:"6px" }}>Delay (minutes)</label>
+                      <input
+                        type="number" min={15} max={240} step={5}
+                        value={fixDayDelay}
+                        onChange={(e) => setFixDayDelay(e.target.value === "" ? "" : Number(e.target.value))}
+                        style={{ width:"100%", padding:"9px 10px", border:"1px solid var(--border)", borderRadius:"8px", fontSize:"13px", fontFamily:"var(--font-ui)", outline:"none", boxSizing:"border-box" }}
+                      />
+                      <span style={{ fontSize:"10px", color:"var(--dim)" }}>Between 15 and 240</span>
+                    </div>
+                  </div>
+                )}
+
+                {fixDayReason === "custom" && (
+                  <div style={{ marginBottom:"16px" }}>
+                    <label style={{ fontSize:"11px", fontWeight:"700", color:"var(--muted)", display:"block", marginBottom:"6px" }}>What happened?</label>
+                    <textarea
+                      value={fixDayCustom}
+                      maxLength={300}
+                      onChange={(e) => setFixDayCustom(e.target.value)}
+                      placeholder="e.g. Museum is closed today and it's raining"
+                      style={{ width:"100%", minHeight:"70px", padding:"10px", border:"1px solid var(--border)", borderRadius:"8px", fontSize:"13px", fontFamily:"var(--font-ui)", resize:"vertical", outline:"none", boxSizing:"border-box" }}
+                    />
+                    <span style={{ fontSize:"10px", color:"var(--dim)" }}>{(fixDayCustom || "").trim().length}/300</span>
+                  </div>
+                )}
+
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:"10px", marginTop:"4px" }}>
+                  <button
+                    onClick={closeFixDayModal}
+                    disabled={fixDayLoading}
+                    style={{ padding:"9px 16px", borderRadius:"8px", border:"1px solid var(--border)", background:"#fff", fontWeight:"600", fontSize:"13px", cursor:"pointer" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleFixDayPreview}
+                    disabled={!isFixDayFormValid() || fixDayLoading}
+                    style={{ padding:"9px 20px", borderRadius:"8px", border:"none", background:"var(--amber)", color:"#fff", fontWeight:"700", fontSize:"13px", cursor:(!isFixDayFormValid() || fixDayLoading) ? "not-allowed" : "pointer", opacity:(!isFixDayFormValid() || fixDayLoading) ? 0.6 : 1 }}
+                  >
+                    {fixDayLoading ? "⏳ Analyzing…" : "Preview Fix →"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {/* FIXDAY_STEP2 */}
+            {fixDayPreview && (
+              <div>
+                {/* Score delta */}
+                {fixDayPreview.scoreDelta && (
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px", background:"rgba(16,185,129,0.06)", border:"1px solid rgba(16,185,129,0.25)", borderRadius:"12px", padding:"14px 16px", marginBottom:"16px", flexWrap:"wrap" }}>
+                    <div>
+                      <div style={{ fontSize:"11px", fontWeight:"700", textTransform:"uppercase", letterSpacing:"0.06em", color:"var(--muted)" }}>Reality Score</div>
+                      <div style={{ fontSize:"22px", fontWeight:"900", color:"var(--text)", display:"flex", alignItems:"center", gap:"8px" }}>
+                        <span style={{ color:"var(--muted)" }}>{fixDayPreview.scoreDelta.scoreBefore}</span>
+                        <span style={{ fontSize:"16px", color:"var(--dim)" }}>→</span>
+                        <span style={{ color:"var(--emerald-text)" }}>{fixDayPreview.scoreDelta.scoreAfter}</span>
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right", fontSize:"11px", fontWeight:"700" }}>
+                      <div style={{ color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em" }}>Status</div>
+                      <div style={{ marginTop:"4px", color:"var(--text)" }}>
+                        {fixDayPreview.scoreDelta.statusBefore} <span style={{ color:"var(--dim)" }}>→</span> {fixDayPreview.scoreDelta.statusAfter}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Diagnosis */}
+                {fixDayPreview.diagnosis && (
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:"8px", marginBottom:"16px" }}>
+                    <span style={{ fontSize:"11px", padding:"3px 10px", borderRadius:"6px", background:"rgba(0,0,0,0.03)", color:"var(--muted)", fontWeight:"500" }}>
+                      ⏱️ Active: <b style={{ color:"var(--text)" }}>{fixDayPreview.diagnosis.beforeActiveMinutes}m → {fixDayPreview.diagnosis.targetActiveMinutes}m</b>
+                    </span>
+                    <span style={{ fontSize:"11px", padding:"3px 10px", borderRadius:"6px", background:"rgba(0,0,0,0.03)", color:"var(--muted)", fontWeight:"500" }}>
+                      🔒 Locked anchors: <b style={{ color:"var(--text)" }}>{fixDayPreview.diagnosis.lockedAnchorsCount}</b>
+                    </span>
+                    {Array.isArray(fixDayPreview.diagnosis.issuesAddressed) && fixDayPreview.diagnosis.issuesAddressed.length > 0 && (
+                      <span style={{ fontSize:"11px", padding:"3px 10px", borderRadius:"6px", background:"rgba(245,158,11,0.12)", color:"#b45309", fontWeight:"600" }}>
+                        ✓ Addresses {fixDayPreview.diagnosis.issuesAddressed.length} {fixDayPreview.diagnosis.issuesAddressed.length === 1 ? "issue" : "issues"}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* FIXDAY_SLOTS */}
+                <div style={{ fontSize:"11px", fontWeight:"800", color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"10px" }}>
+                  Proposed day
+                </div>
+                <div style={{ display:"grid", gap:"10px", marginBottom:"16px" }}>
+                  {Array.isArray(fixDayPreview.slots) && fixDayPreview.slots.map((slot, idx) => {
+                    const actionLabels = {
+                      COMPLETED_PAST: { text:"✓ Completed", color:"var(--dim)" },
+                      CURRENT_IN_PROGRESS: { text:"▶ In progress", color:"var(--amber-text)" },
+                      UNCHANGED: { text:"= Unchanged", color:"var(--muted)" },
+                      REPLACED: { text:"⇄ Replaced", color:"var(--emerald-text)" },
+                    };
+                    const meta = actionLabels[slot.action] || { text: slot.action, color:"var(--muted)" };
+                    const isReplaced = slot.action === "REPLACED";
+                    return (
+                      <div key={idx} className={`fixday-slot ${isReplaced ? "replaced" : "readonly"}`}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"6px", gap:"8px" }}>
+                          <span style={{ fontSize:"10px", fontWeight:"800", textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--muted)" }}>
+                            {slot.period}
+                          </span>
+                          <span style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+                            {slot.isLocked && <span style={{ fontSize:"10px", fontWeight:"700", color:"var(--amber-text)" }}>🔒 Locked</span>}
+                            <span style={{ fontSize:"10px", fontWeight:"800", color: meta.color }}>{meta.text}</span>
+                          </span>
+                        </div>
+                        {isReplaced ? (
+                          <div>
+                            <div style={{ fontSize:"12px", color:"var(--muted)", textDecoration:"line-through", opacity:0.75 }}>
+                              {slot.originalActivity?.title}
+                              {slot.originalActivity?.durationMinutes ? ` · ${slot.originalActivity.durationMinutes}m` : ""}
+                            </div>
+                            <div style={{ fontSize:"14px", color:"var(--dim)", lineHeight:"1", margin:"2px 0" }}>↓</div>
+                            <div style={{ fontSize:"13px", fontWeight:"700", color:"var(--text)" }}>
+                              {slot.replacementActivity?.title}
+                            </div>
+                            {slot.replacementActivity?.description && (
+                              <div style={{ fontSize:"12px", color:"var(--muted)", marginTop:"2px" }}>{slot.replacementActivity.description}</div>
+                            )}
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:"6px", marginTop:"6px" }}>
+                              {slot.replacementActivity?.category && (
+                                <span className="activity-meta-pill" style={{ background:"rgba(217,119,6,0.08)", color:"#b45309" }}>🏷️ {slot.replacementActivity.category}</span>
+                              )}
+                              {slot.replacementActivity?.durationMinutes && (
+                                <span className="activity-meta-pill" style={{ background:"rgba(5,150,105,0.08)", color:"#047857" }}>⏱️ {slot.replacementActivity.durationMinutes}m</span>
+                              )}
+                              {slot.replacementActivity?.indoorOutdoor && (
+                                <span className="activity-meta-pill" style={{ background:"rgba(79,70,229,0.08)", color:"#4338ca" }}>{slot.replacementActivity.indoorOutdoor}</span>
+                              )}
+                              {slot.replacementActivity?.cost && (
+                                <span className="activity-meta-pill" style={{ background:"rgba(107,114,128,0.08)", color:"#374151" }}>💰 {slot.replacementActivity.cost}</span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize:"13px", fontWeight:"500", color:"var(--text)" }}>
+                            {slot.activity?.title}
+                            {slot.activity?.durationMinutes ? <span style={{ color:"var(--muted)" }}> · {slot.activity.durationMinutes}m</span> : null}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* FIXDAY_STEP2_FOOTER */}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px", marginTop:"4px" }}>
+                  <button
+                    onClick={() => { setFixDayPreview(null); setFixDayError(null); }}
+                    disabled={fixDayApplying}
+                    style={{ padding:"9px 16px", borderRadius:"8px", border:"1px solid var(--border)", background:"#fff", fontWeight:"600", fontSize:"13px", cursor:fixDayApplying ? "not-allowed" : "pointer" }}
+                  >
+                    ← Back
+                  </button>
+                  <div style={{ display:"flex", gap:"10px" }}>
+                    <button
+                      onClick={closeFixDayModal}
+                      disabled={fixDayApplying}
+                      style={{ padding:"9px 16px", borderRadius:"8px", border:"1px solid var(--border)", background:"#fff", fontWeight:"600", fontSize:"13px", cursor:fixDayApplying ? "not-allowed" : "pointer" }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleFixDayApply}
+                      disabled={fixDayApplying}
+                      style={{ padding:"9px 20px", borderRadius:"8px", border:"none", background:"var(--emerald)", color:"#fff", fontWeight:"700", fontSize:"13px", cursor:fixDayApplying ? "not-allowed" : "pointer", opacity:fixDayApplying ? 0.6 : 1 }}
+                    >
+                      {fixDayApplying ? "⏳ Applying…" : "✓ Apply Change"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
