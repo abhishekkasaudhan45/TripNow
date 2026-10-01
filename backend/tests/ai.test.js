@@ -232,6 +232,41 @@ describe("POST /api/ai - Google Gemini Integration", () => {
     expect(savedBooking.aiPlan).toBe(JSON.stringify(sampleItinerary));
   });
 
+  it("returns 200 with tripId null when itinerary generates but DB persistence fails", async () => {
+    GoogleGenAI.mockImplementation(() => ({
+      models: {
+        generateContent: jest.fn().mockResolvedValue({
+          text: JSON.stringify(sampleItinerary),
+        }),
+      },
+    }));
+
+    // Simulate an infrastructure-level persistence failure (e.g. connection/buffering).
+    const createSpy = jest
+      .spyOn(Booking, "create")
+      .mockRejectedValueOnce(new Error("MongoNetworkError: connection timed out"));
+
+    const res = await request(app).post("/api/ai").send({
+      destination: "Goa",
+      budget: "20000",
+      startDate: "2026-10-01",
+      endDate: "2026-10-04",
+    });
+
+    // Generation succeeded -> the itinerary contract is preserved and NOT reported
+    // as an AI error; only tripId is null so the client gracefully disables save/adapt.
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toBe(JSON.stringify(sampleItinerary));
+    expect(res.body.tripId).toBeNull();
+
+    // Nothing was persisted.
+    const count = await Booking.countDocuments();
+    expect(count).toBe(0);
+
+    createSpy.mockRestore();
+  });
+
   it("falls back to gemini-3.6-flash ONLY when model returns the specific 'no longer available to new users' error", async () => {
     const origModel = env.geminiModel;
     env.geminiModel = "gemini-2.5-flash";

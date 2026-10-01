@@ -504,7 +504,7 @@ export default function PlanTrip() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
-        @import url('[https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap](https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap)');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap');
 
         /* Updated to warm, creamy tones to completely remove blue */
         .travel-vibe-bg { position:fixed; top:0; left:0; width:100vw; height:100vh; background:#FDFBF7; z-index:-1; overflow:hidden; }

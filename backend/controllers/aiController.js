@@ -77,87 +77,96 @@ const validateItinerary = (data) => {
   return true;
 };
 
-const handleGeminiError = (error, res) => {
-  const status = error.status || error.statusCode || error.code;
+// Classifies an error thrown while talking to Gemini into a stable bucket so the
+// server logs make the failure mode obvious (auth / model / rate limit / timeout /
+// upstream outage / unclassified) without ever leaking the key or a stack trace to
+// the client. The HTTP status + message for each bucket are part of the API contract.
+const classifyGeminiError = (error) => {
+  const status =
+    error.status ||
+    error.statusCode ||
+    error.code ||
+    error?.response?.status ||
+    error?.cause?.status;
   const rawMsg = error.message || "";
-  let errorDetail = "";
+  let errorDetail = rawMsg;
   try {
     const parsed = typeof rawMsg === "string" && rawMsg.trim().startsWith("{") ? JSON.parse(rawMsg) : null;
     errorDetail = parsed?.error?.message || rawMsg;
   } catch {
     errorDetail = rawMsg;
   }
+  const lower = errorDetail.toLowerCase();
+  const logDetail = { status, name: error.name, message: errorDetail };
 
-  // 🪵 Server-side logging only for Render console and debugging — NEVER leak to client
-  console.error("🔒 AI Controller Internal Error:", {
-    status,
-    message: errorDetail,
-    name: error.name,
-  });
-
-  const isAuthError =
+  if (
     status === 401 ||
     status === 403 ||
     (status === 400 && (errorDetail.includes("API key not valid") || errorDetail.includes("API_KEY_INVALID"))) ||
-    errorDetail.includes("API_KEY_INVALID");
-
-  if (isAuthError) {
-    return res.status(502).json({
-      success: false,
-      message: "AI service authentication failed: Invalid or unauthorized API key",
-    });
+    errorDetail.includes("API_KEY_INVALID")
+  ) {
+    return { bucket: "auth", httpStatus: 502, message: "AI service authentication failed: Invalid or unauthorized API key", logDetail };
   }
 
-  const isModelUnavailable =
+  if (
     status === 404 ||
     errorDetail.includes("models/") ||
     errorDetail.includes("not found") ||
     errorDetail.includes("is not supported") ||
-    errorDetail.includes("NOT_FOUND");
-
-  if (isModelUnavailable) {
-    return res.status(502).json({
-      success: false,
-      message: "AI service model configuration error: Configured model is unavailable",
-    });
+    errorDetail.includes("NOT_FOUND")
+  ) {
+    return { bucket: "model_unavailable", httpStatus: 502, message: "AI service model configuration error: Configured model is unavailable", logDetail };
   }
 
-  const isRateLimited =
+  if (
     status === 429 ||
     errorDetail.includes("RESOURCE_EXHAUSTED") ||
     errorDetail.includes("Quota exceeded") ||
-    errorDetail.includes("rate limit");
-
-  if (isRateLimited) {
-    return res.status(429).json({
-      success: false,
-      message: "AI service rate limit reached. Please try again in a few moments.",
-    });
+    errorDetail.includes("rate limit")
+  ) {
+    return { bucket: "rate_limited", httpStatus: 429, message: "AI service rate limit reached. Please try again in a few moments.", logDetail };
   }
 
-  const isTimeout =
+  if (
     status === 504 ||
     error.name === "AbortError" ||
     error.code === "ETIMEDOUT" ||
     error.code === "ECONNABORTED" ||
     error.cause?.code === "UND_ERR_CONNECT_TIMEOUT" ||
     error.cause?.name === "ConnectTimeoutError" ||
-    errorDetail.toLowerCase().includes("timeout") ||
-    errorDetail.toLowerCase().includes("timed out") ||
-    errorDetail.toLowerCase().includes("fetch failed");
-
-  if (isTimeout) {
-    return res.status(504).json({
-      success: false,
-      message: "AI service request timed out. Please try again.",
-    });
+    lower.includes("timeout") ||
+    lower.includes("timed out") ||
+    lower.includes("fetch failed")
+  ) {
+    return { bucket: "timeout", httpStatus: 504, message: "AI service request timed out. Please try again.", logDetail };
   }
 
-  return res.status(502).json({
-    success: false,
-    message: "AI service error: Unable to generate itinerary at this time. Please try again.",
-  });
+  // Gemini 500/503 "model is overloaded" / UNAVAILABLE / internal errors — common on
+  // the free tier. Previously these fell through to the generic 502 with no signal.
+  if (
+    status === 500 ||
+    status === 503 ||
+    errorDetail.includes("UNAVAILABLE") ||
+    errorDetail.includes("INTERNAL") ||
+    lower.includes("overloaded") ||
+    lower.includes("internal error")
+  ) {
+    return { bucket: "upstream_unavailable", httpStatus: 503, message: "AI service is temporarily overloaded. Please try again in a moment.", logDetail };
+  }
+
+  return { bucket: "unclassified", httpStatus: 502, message: "AI service error: Unable to generate itinerary at this time. Please try again.", logDetail };
 };
+
+const handleGeminiError = (error, res) => {
+  const { bucket, httpStatus, message, logDetail } = classifyGeminiError(error);
+  // 🪵 Server-side only — NEVER leaks to the client. The bucket makes Render logs triageable.
+  console.error("🔒 AI Controller Internal Error:", { bucket, ...logDetail });
+  return res.status(httpStatus).json({ success: false, message });
+};
+
+// Hard cap on the itinerary-generation Gemini call. A full multi-day itinerary is a
+// larger generation than a single-slot pivot (12s), so this is more generous.
+const AI_GENERATION_TIMEOUT_MS = 25000;
 
 const generateAITrip = async (req, res) => {
   try {
@@ -193,40 +202,50 @@ Ensure each day includes specific morning, afternoon, evening activities, and re
     let response;
     let usedModel = env.geminiModel;
 
-    try {
-      response = await ai.models.generateContent({
-        model: usedModel,
-        contents: finalPrompt,
-        config: {
-          systemInstruction: "You are an expert travel planner. Always respond with a valid JSON itinerary adhering strictly to the response schema. Never return markdown backticks or commentary.",
-          responseMimeType: "application/json",
-          responseSchema: itinerarySchema,
-          temperature: 0.7,
-        },
-      });
-    } catch (primaryErr) {
-      const msg = primaryErr.message || "";
-      const isNewUserDeprecation =
-        primaryErr.status === 404 &&
-        msg.toLowerCase().includes("no longer available to new users");
+    const generationConfig = {
+      systemInstruction: "You are an expert travel planner. Always respond with a valid JSON itinerary adhering strictly to the response schema. Never return markdown backticks or commentary.",
+      responseMimeType: "application/json",
+      responseSchema: itinerarySchema,
+      temperature: 0.7,
+    };
 
-      if (isNewUserDeprecation) {
-        const fallbackModel = "gemini-3.6-flash";
-        console.warn(`⚠️ Model '${usedModel}' is no longer available to new users. Falling back to Google AI Studio recommended '${fallbackModel}'...`);
-        usedModel = fallbackModel;
-        response = await ai.models.generateContent({
-          model: usedModel,
-          contents: finalPrompt,
-          config: {
-            systemInstruction: "You are an expert travel planner. Always respond with a valid JSON itinerary adhering strictly to the response schema. Never return markdown backticks or commentary.",
-            responseMimeType: "application/json",
-            responseSchema: itinerarySchema,
-            temperature: 0.7,
-          },
-        });
-      } else {
+    // Perform the Gemini call (with the new-user deprecation fallback) but cap it with a
+    // timeout so a hung upstream request surfaces as a clean 504 instead of hanging until
+    // the platform kills the socket — matching pivot/fixDay service behaviour.
+    const requestPromise = (async () => {
+      try {
+        return await ai.models.generateContent({ model: usedModel, contents: finalPrompt, config: generationConfig });
+      } catch (primaryErr) {
+        const msg = primaryErr.message || "";
+        const isNewUserDeprecation =
+          primaryErr.status === 404 &&
+          msg.toLowerCase().includes("no longer available to new users");
+
+        if (isNewUserDeprecation) {
+          const originalModel = usedModel;
+          usedModel = "gemini-3.6-flash";
+          console.warn(`⚠️ Model '${originalModel}' is no longer available to new users. Falling back to Google AI Studio recommended '${usedModel}'...`);
+          return await ai.models.generateContent({ model: usedModel, contents: finalPrompt, config: generationConfig });
+        }
         throw primaryErr;
       }
+    })();
+
+    let timeoutTimer;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutTimer = setTimeout(() => {
+        const err = new Error("AI service request timed out");
+        err.name = "AbortError";
+        err.status = 504;
+        reject(err);
+      }, AI_GENERATION_TIMEOUT_MS);
+      if (timeoutTimer.unref) timeoutTimer.unref();
+    });
+
+    try {
+      response = await Promise.race([requestPromise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutTimer);
     }
 
     let text = response.text || "";
@@ -261,21 +280,41 @@ Ensure each day includes specific morning, afternoon, evening activities, and re
 
     console.log("✅ Google Gemini responded and validated successfully");
 
+    // Normalise dates so a valid itinerary always persists: Booking requires
+    // checkout > checkin, so fall back to the day after check-in when the client
+    // omitted or sent an invalid / reversed end date.
     const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const parsedCheckin = startDate ? new Date(startDate) : today;
+    const checkin = isNaN(parsedCheckin.getTime()) ? today : parsedCheckin;
+    const parsedCheckout = endDate ? new Date(endDate) : null;
+    const checkoutValid = parsedCheckout && !isNaN(parsedCheckout.getTime()) && parsedCheckout > checkin;
+    const checkout = checkoutValid ? parsedCheckout : new Date(checkin.getTime() + 86400000);
 
-    const savedTrip = await Booking.create({
-      user: req.user?._id || null,
-      destination: destination || parsed.destination || "AI Generated",
-      guests: 1,
-      checkin: startDate ? new Date(startDate) : today,
-      checkout: endDate ? new Date(endDate) : tomorrow,
-      budget: budget ? String(budget) : null,
-      aiPlan: text,
-    });
+    // Persist separately from the Gemini call: a DB failure must NOT be reported as an
+    // "AI service error". The itinerary was generated successfully, so return it even if
+    // saving fails — the user still sees their plan (save/adapt features stay disabled,
+    // which the frontend already guards on a missing tripId).
+    let tripId = null;
+    try {
+      const savedTrip = await Booking.create({
+        user: req.user?._id || null,
+        destination: destination || parsed.destination || "AI Generated",
+        guests: 1,
+        checkin,
+        checkout,
+        budget: budget ? String(budget) : null,
+        aiPlan: text,
+      });
+      tripId = savedTrip._id;
+    } catch (dbErr) {
+      console.error("🗄️ AI Controller DB Error: itinerary generated but failed to persist:", {
+        name: dbErr.name,
+        code: dbErr.code,
+        message: dbErr.message,
+      });
+    }
 
-    return res.json({ success: true, data: text, tripId: savedTrip._id });
+    return res.json({ success: true, data: text, tripId });
   } catch (error) {
     return handleGeminiError(error, res);
   }

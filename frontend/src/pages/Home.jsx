@@ -123,8 +123,8 @@ export default function Home() {
           <OptimizedImage
             src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429"
             alt="Luxury Travel Background"
-            width={1920}
-            height={1080}
+            width={1600}
+            height={900}
             priority={true} // High priority for Hero image
             className="w-full h-full object-cover opacity-[0.28]"
           />
