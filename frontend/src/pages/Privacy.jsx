@@ -29,7 +29,7 @@ function Privacy() {
       <h2>3. Third-party services</h2>
       <p>We rely on a small number of trusted providers to run TripNow:</p>
       <ul>
-        <li><strong>Groq</strong> — processes your trip prompts to generate itineraries.</li>
+        <li><strong>Google Gemini</strong> — processes your trip prompts to generate itineraries.</li>
         <li><strong>MongoDB Atlas</strong> — stores your account and trip data.</li>
         <li><strong>Vercel</strong> and <strong>Render</strong> — host the app and API.</li>
         <li><strong>EmailJS</strong> — delivers feedback-form messages.</li>
