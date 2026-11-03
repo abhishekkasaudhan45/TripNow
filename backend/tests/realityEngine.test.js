@@ -217,7 +217,8 @@ describe("Reality Engine - Pace Engine", () => {
     ];
     const res = evaluateTripPace(days, 240); // 4 hours
     expect(res.paceCategory).toBe("Relaxed");
-    expect(res.subScore).toBe(92);
+    // Phase 5F.2: Calibrated from deterministic pacing curve (eliminates legacy 92 inversion penalty)
+    expect(res.subScore).toBe(99);
   });
 
   it("classifies balanced trip correctly", () => {

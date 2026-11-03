@@ -6,19 +6,11 @@ import Button from "../components/ui/Button";
 import FeedbackMessage from "../components/ui/FeedbackMessage";
 import Pagination from "../components/ui/Pagination";
 import { getAdminBookings } from "../services/bookingService";
+import api from "../lib/api";
+import { clearAuth } from "../utils/auth";
 
 const PAGE_SIZE = 6;
 const DEFAULT_PAGINATION = { page:1, total:0, totalPages:1, limit:PAGE_SIZE };
-
-// ✅ FIX: Read from localStorage (consistent with Login.jsx and api.js)
-const getStoredToken = () => {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
-};
-const clearStoredToken = () => {
-  localStorage.removeItem("token");
-  sessionStorage.removeItem("token");
-};
 
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message || fallback;
@@ -29,24 +21,24 @@ function Admin() {
   const page = Math.max(Number.parseInt(searchParams.get("page") || "1", 10), 1);
 
   const [reloadToken, setReloadToken] = useState(0);
-  const [token, setToken]             = useState(getStoredToken);
   const [bookings, setBookings]       = useState([]);
   const [pagination, setPagination]   = useState(DEFAULT_PAGINATION);
   const [isLoading, setIsLoading]     = useState(true);
   const [error, setError]             = useState("");
 
   useEffect(() => {
-    if (!token) { navigate("/login"); return; }
-
     const load = async () => {
-      setIsLoading(true); setError("");
+      setIsLoading(true);
+      setError("");
       try {
-        const res = await getAdminBookings(token, { page, limit: PAGE_SIZE });
+        const res = await getAdminBookings({ page, limit: PAGE_SIZE });
         setBookings(res.data.data || []);
         setPagination(res.data.meta || { ...DEFAULT_PAGINATION, page });
       } catch (err) {
         if (err?.response?.status === 401) {
-          clearStoredToken(); setToken(""); navigate("/login"); return;
+          clearAuth();
+          navigate("/login");
+          return;
         }
         setError(getErrorMessage(err, "Unable to load bookings. Please try again."));
       } finally {
@@ -54,15 +46,19 @@ function Admin() {
       }
     };
     load();
-  }, [page, reloadToken, token, navigate]);
+  }, [page, reloadToken, navigate]);
 
   const handlePageChange = (next) => {
     if (next < 1 || next > pagination.totalPages) return;
     setSearchParams({ page: String(next) });
   };
 
-  const handleLogout = () => {
-    clearStoredToken(); setToken(""); navigate("/login");
+  const handleLogout = async () => {
+    try {
+      await api.post("/api/auth/logout");
+    } catch (_) {}
+    clearAuth();
+    navigate("/login");
   };
 
   const loadingRows = Array.from({ length: 5 }, (_, i) => i);

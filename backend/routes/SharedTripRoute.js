@@ -1,34 +1,17 @@
-// backend/routes/sharedTripRoute.js
-// ✅ UNPROTECTED — no auth middleware, anyone with the link can access
-
+// backend/routes/SharedTripRoute.js
+// 🔒 PUBLIC: Unauthenticated endpoint for shared trip links
 const express = require("express");
-const router  = express.Router();
-const Booking = require("../models/Booking"); // ✅ your actual model
+const router = express.Router();
+const { getSharedTrip } = require("../controllers/Sharedtripcontroller");
+const { sharedTripLimiter } = require("../middleware/rateLimiters");
+const { validateObjectId } = require("../middleware/validateObjectId");
 
 /**
  * GET /api/bookings/shared/:id
- * Public route — returns a single booking by MongoDB _id.
- * No JWT required so shared links work for non-logged-in users.
+ * Public route — returns sanitized public trip data by MongoDB _id.
+ * No JWT required. Strict DTO projection ensures zero PII leakage.
+ * Protected by sharedTripLimiter and ObjectId format validation.
  */
-router.get("/:id", async (req, res) => {
-  try {
-    const trip = await Booking.findById(req.params.id).lean();
-
-    if (!trip) {
-      return res.status(404).json({
-        success: false,
-        message: "Trip not found.",
-      });
-    }
-
-    res.json({ success: true, data: trip });
-  } catch (err) {
-    // Catches malformed ObjectId (CastError) too
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch trip.",
-    });
-  }
-});
+router.get("/:id", sharedTripLimiter, validateObjectId("id"), getSharedTrip);
 
 module.exports = router;

@@ -1,6 +1,6 @@
 const request = require("supertest");
 const app = require("../app");
-const { connect, clearDatabase, closeDatabase } = require("./db");
+const { connect, clearDatabase, closeDatabase, extractToken } = require("./db");
 
 beforeAll(async () => { await connect(); });
 afterEach(async () => { await clearDatabase(); });
@@ -12,7 +12,7 @@ const userB = { name: "Intruder B", email: "b@example.com", password: "Passw0rd"
 
 const signup = async (user) => {
   const res = await request(app).post("/api/auth/signup").send(user);
-  return res.body.data.token;
+  return extractToken(res);
 };
 
 const validBooking = {
@@ -24,6 +24,7 @@ const validBooking = {
   fullName: "Owner A",
   email: "a@example.com",
   phone: "9876543210",
+  isShared: true,
 };
 
 const createBooking = async (token) => {

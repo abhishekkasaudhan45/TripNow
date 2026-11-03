@@ -3,7 +3,7 @@ const request = require("supertest");
 const app = require("../app");
 const env = require("../config/env");
 const Booking = require("../models/Booking");
-const { connect, clearDatabase, closeDatabase } = require("./db");
+const { connect, clearDatabase, closeDatabase, extractToken } = require("./db");
 const { GoogleGenAI } = require("@google/genai");
 
 jest.mock("@google/genai", () => {
@@ -32,7 +32,7 @@ const userB = { name: "Traveler B", email: "travelerB@example.com", password: "P
 
 const signup = async (user) => {
   const res = await request(app).post("/api/auth/signup").send(user);
-  return { token: res.body.data.token, user: res.body.data.user };
+  return { token: extractToken(res), user: res.body.data.user };
 };
 
 const sample3DayPlan = {
@@ -421,11 +421,12 @@ describe("POST /api/ai/pivot & Activity Lock Integration", () => {
     expect(pivotRes.status).toBe(200);
     expect(pivotRes.body.success).toBe(true);
     expect(pivotRes.body.data.replacement.title).toBe("Sunaparanta Centre for the Arts");
+    expect(pivotRes.body.data.replacement.indoorOutdoor).toBe("Indoor");
+    expect(pivotRes.body.data.persisted).toBe(false);
 
-    // Verify in MongoDB that structured activity was mutated
-    const persisted = await Booking.findById(booking._id);
-    const plan = JSON.parse(persisted.aiPlan);
-    const d2Aft = plan.days[1].activities.find((a) => a.id === "d2-afternoon-01");
+    // Verify structured activity was staged in replacement candidate
+    const stagedPlan = pivotRes.body.data.stagedPlan;
+    const d2Aft = stagedPlan.days[1].activities.find((a) => a.id === "d2-afternoon-01");
     expect(d2Aft.title).toBe("Sunaparanta Centre for the Arts");
     expect(d2Aft.indoorOutdoor).toBe("Indoor");
   });

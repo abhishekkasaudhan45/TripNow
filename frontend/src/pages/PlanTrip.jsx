@@ -7,15 +7,23 @@
 //   5. Skeletons: Added Premium TripSkeleton for loading states.
 
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../lib/api";
 import { downloadItineraryPDF } from "../utils/pdf";
+import { getTripById, saveItinerary } from "../services/bookingService";
+import { getUser } from "../utils/auth";
 
 // 🔥 IMPORT YOUR CUSTOM MAP COMPONENT
 import MapView from "../components/MapView";
 
 // ✅ ADDED SKELETON IMPORT
 import { TripSkeleton } from "../components/Skeletons";
+import CustomPivotModal from "../components/pivot/CustomPivotModal";
+import AuthPromptModal from "../components/auth/AuthPromptModal";
+import ActivityMetadataBadges from "../components/ActivityMetadataBadges";
+import BudgetIntelligencePanel from "../components/budget/BudgetIntelligencePanel";
+import { calculateBudgetIntelligence } from "../utils/budgetIntelligence";
+import { RealityScoreBanner, RealityScoreModal } from "../components/reality";
 
 function parseTripData(raw) {
   if (!raw) return null;
@@ -44,18 +52,29 @@ const safeString = (val) => {
 export default function PlanTrip() {
   const { state } = useLocation();
   const navigate  = useNavigate();
+  const { id: routeTripId } = useParams();
 
-  const destination = state?.destination || "";
-  const budget      = state?.budget      || "";
-  const startDate   = state?.checkin     || "";
-  const endDate     = state?.checkout    || "";
+  const [destination, setDestination] = useState(state?.destination || "");
+  const [budget, setBudget]           = useState(state?.budget || "");
+  const [startDate, setStartDate]     = useState(state?.checkin || "");
+  const [endDate, setEndDate]         = useState(state?.checkout || "");
+  const [travelers, setTravelers]     = useState(
+    Math.max(1, Number(state?.travelers ?? state?.guests ?? 1))
+  );
 
-  const [tripData, setTripData]         = useState(null);
-  const [tripId, setTripId]             = useState(state?.tripId || state?.bookingId || state?._id || null);
+  const [tripData, setTripData]         = useState(state?.stagedTrip || null);
+  const [tripId, setTripId]             = useState(routeTripId || state?.tripId || state?.bookingId || state?._id || null);
+  const [serverVersion, setServerVersion] = useState(0);
+  const [_savedBaseline, setSavedBaseline] = useState(null);
+  const [isDirty, setIsDirty]           = useState(false);
+  const [saveStatus, setSaveStatus]     = useState("clean"); // "clean" | "dirty" | "saving" | "success" | "error" | "conflict"
+  const [saveErrorMessage, setSaveErrorMessage] = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [_showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [_pendingNavPath, setPendingNavPath] = useState(null);
   const [activePivotMenu, setActivePivotMenu] = useState(null);
   const [pivotLoading, setPivotLoading]       = useState({});
   const [lockLoading, setLockLoading]         = useState({});
-  const [customReasonInput, setCustomReasonInput] = useState("");
   const [showCustomModal, setShowCustomModal]     = useState(false);
   const [pivotTarget, setPivotTarget]             = useState(null);
   const [pivotError, setPivotError]               = useState(null);
@@ -108,7 +127,95 @@ export default function PlanTrip() {
     : (Array.isArray(tripData?.days) ? tripData.days.length : 0);
 
   useEffect(() => {
-    if (!state) { navigate("/"); return; }
+    const effectiveId = routeTripId || state?.tripId || state?.bookingId || state?._id;
+
+    if (effectiveId) {
+      if (state?.stagedTrip) {
+        setTripId(effectiveId);
+        setTripData(state.stagedTrip);
+        setIsDirty(true);
+        setSaveStatus("dirty");
+
+        const verifyOwnershipAndLoad = async () => {
+          try {
+            setLoading(true);
+            setError("");
+            const res = await getTripById(effectiveId);
+            if (res.data?.success && res.data?.data) {
+              const booking = res.data.data;
+              setTripId(booking._id);
+              setDestination(booking.destination || state?.destination || "");
+              setBudget(booking.budget || state?.budget || "");
+              setStartDate(booking.checkin || state?.checkin || "");
+              setEndDate(booking.checkout || state?.checkout || "");
+              if (booking.guests) setTravelers(Number(booking.guests));
+              setServerVersion(booking.__v ?? 0);
+
+              const dbParsed = parseTripData(booking.aiPlan);
+              setSavedBaseline(JSON.parse(JSON.stringify(dbParsed)));
+              if (booking.realityScore) {
+                setRealityReport(booking.realityScore);
+              }
+            }
+          } catch (err) {
+            setError(
+              err?.response?.data?.message ||
+              "Unable to verify trip ownership. You cannot save another user's trip."
+            );
+            setSaveStatus("error");
+            setSaveErrorMessage("You cannot save another user's trip.");
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        verifyOwnershipAndLoad();
+        return;
+      }
+
+      const loadExistingTrip = async () => {
+        try {
+          setLoading(true);
+          setError("");
+          const res = await getTripById(effectiveId);
+          if (res.data?.success && res.data?.data) {
+            const booking = res.data.data;
+            setTripId(booking._id);
+            setDestination(booking.destination || "");
+            setBudget(booking.budget || "");
+            setStartDate(booking.checkin || "");
+            setEndDate(booking.checkout || "");
+            if (booking.guests) setTravelers(Number(booking.guests));
+            setServerVersion(booking.__v ?? 0);
+
+            const parsed = parseTripData(booking.aiPlan);
+            setTripData(parsed);
+            setSavedBaseline(JSON.parse(JSON.stringify(parsed)));
+            setIsDirty(false);
+            setSaveStatus("clean");
+
+            if (booking.realityScore) {
+              setRealityReport(booking.realityScore);
+            }
+          }
+        } catch (err) {
+          setError(
+            err?.response?.data?.message ||
+            "Unable to load the requested trip. Please check your connection or dashboard."
+          );
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadExistingTrip();
+      return;
+    }
+
+    if (!state) {
+      navigate("/");
+      return;
+    }
 
     const fetchAI = async () => {
       try {
@@ -117,12 +224,22 @@ export default function PlanTrip() {
         setShowSuccess(false);
         setShowToast(false);
 
-        const res = await api.post("/api/ai", { destination, budget, startDate, endDate });
+        const res = await api.post("/api/ai", {
+          destination: state?.destination || destination,
+          budget: state?.budget || budget,
+          startDate: state?.checkin || startDate,
+          endDate: state?.checkout || endDate,
+        });
         const raw = res.data.data || "";
         const parsed = parseTripData(raw);
         setTripData(parsed);
+        setSavedBaseline(JSON.parse(JSON.stringify(parsed)));
+        setIsDirty(false);
+        setSaveStatus("clean");
+
         if (res.data.tripId) {
           setTripId(res.data.tripId);
+          setServerVersion(0);
           fetchRealityScore(res.data.tripId);
         }
         setShowSuccess(true);
@@ -144,7 +261,130 @@ export default function PlanTrip() {
 
     fetchAI();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [routeTripId]);
+
+  // Unsaved Navigation Guard (Tab close / refresh)
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  // Phase 3C.1 Auth Success Handler
+  const handleAuthSuccess = async () => {
+    setShowAuthModal(false);
+    if (!tripId) return;
+
+    try {
+      setLoading(true);
+      setError("");
+      const res = await getTripById(tripId);
+      if (res.data?.success && res.data?.data) {
+        const booking = res.data.data;
+        setServerVersion(booking.__v ?? 0);
+        const dbParsed = parseTripData(booking.aiPlan);
+        setSavedBaseline(JSON.parse(JSON.stringify(dbParsed)));
+        setIsDirty(true);
+        setSaveStatus("dirty");
+        setSaveErrorMessage(null);
+      }
+    } catch (_err) {
+      setSaveStatus("error");
+      setSaveErrorMessage("You cannot save another user's trip.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Phase 3C Save Handler
+  const handleSaveItinerary = async () => {
+    if (saveStatus === "saving") return;
+
+    const user = getUser();
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    if (!tripId) {
+      setSaveErrorMessage("Trip record not found. Please create or save this trip first.");
+      setSaveStatus("error");
+      return;
+    }
+
+    try {
+      setSaveStatus("saving");
+      setSaveErrorMessage(null);
+
+      const res = await saveItinerary(tripId, {
+        itinerary: tripData,
+        baseVersion: serverVersion,
+      });
+
+      if (res.data?.success) {
+        const updated = res.data.data;
+        setServerVersion(updated.__v ?? serverVersion + 1);
+        setSavedBaseline(JSON.parse(JSON.stringify(tripData)));
+        setIsDirty(false);
+        setSaveStatus("success");
+
+        if (updated.realityScore) {
+          setRealityReport(updated.realityScore);
+        }
+
+        setTimeout(() => {
+          setSaveStatus("clean");
+        }, 2500);
+      }
+    } catch (err) {
+      if (err?.response?.status === 409) {
+        setSaveStatus("conflict");
+        setSaveErrorMessage("Conflict: This trip was updated in another window or session. Reload to see the latest version.");
+      } else if (err?.response?.status === 423) {
+        setSaveStatus("error");
+        setSaveErrorMessage(err.response.data?.message || "A locked activity cannot be modified. Please unlock it first.");
+      } else {
+        setSaveStatus("error");
+        setSaveErrorMessage(err?.response?.data?.message || "Failed to save itinerary. Please try again.");
+      }
+    }
+  };
+
+  const handleReloadLatest = async () => {
+    if (!tripId) return;
+    try {
+      setLoading(true);
+      setSaveStatus("clean");
+      setSaveErrorMessage(null);
+      const res = await getTripById(tripId);
+      if (res.data?.success && res.data?.data) {
+        const booking = res.data.data;
+        setServerVersion(booking.__v ?? 0);
+        const parsed = parseTripData(booking.aiPlan);
+        setTripData(parsed);
+        setSavedBaseline(JSON.parse(JSON.stringify(parsed)));
+        setIsDirty(false);
+        if (booking.realityScore) setRealityReport(booking.realityScore);
+      }
+    } catch (err) {
+      setError("Failed to reload latest trip.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const safeNavigate = (toPath, navOptions) => {
+    if (isDirty) {
+      setPendingNavPath({ toPath, navOptions });
+      setShowDiscardConfirm(true);
+    } else {
+      navigate(toPath, navOptions);
+    }
+  };
 
   useEffect(() => {
     if (tripId && !realityReport && !realityLoading) {
@@ -169,7 +409,6 @@ export default function PlanTrip() {
     try {
       setPivotLoading((prev) => ({ ...prev, [slotKey]: true }));
       setActivePivotMenu(null);
-      setShowCustomModal(false);
       setPivotError(null);
 
       const payload = {
@@ -199,8 +438,12 @@ export default function PlanTrip() {
                       title: data.replacement.title,
                       description: data.replacement.description,
                       category: data.replacement.category,
-                      durationMinutes: data.replacement.estimatedDurationMinutes,
-                      cost: data.replacement.costEstimate,
+                      activityType: data.replacement.activityType ?? a.activityType ?? null,
+                      durationMinutes: data.replacement.durationMinutes ?? data.replacement.estimatedDurationMinutes ?? a.durationMinutes ?? null,
+                      durationInferred: false,
+                      travelMode: data.replacement.travelMode ?? a.travelMode ?? null,
+                      intensity: data.replacement.intensity ?? a.intensity ?? null,
+                      cost: data.replacement.cost || data.replacement.costEstimate || a.cost,
                       indoorOutdoor: data.replacement.indoorOutdoor,
                     };
                   }
@@ -230,6 +473,10 @@ export default function PlanTrip() {
 
         // 🌟 Recalculate Reality Score deterministically after pivot
         fetchRealityScore(tripId);
+        setShowCustomModal(false);
+        setPivotTarget(null);
+        setIsDirty(true);
+        setSaveStatus("dirty");
       }
     } catch (err) {
       const msg =
@@ -239,8 +486,6 @@ export default function PlanTrip() {
       setTimeout(() => setPivotError(null), 5000);
     } finally {
       setPivotLoading((prev) => ({ ...prev, [slotKey]: false }));
-      setCustomReasonInput("");
-      setPivotTarget(null);
     }
   };
 
@@ -258,7 +503,11 @@ export default function PlanTrip() {
       title: parts[0]?.trim() || "Activity",
       description: parts.slice(1).join(" — ")?.trim() || parts[0]?.trim() || "",
       category: period === "evening" ? "Dining & Nightlife" : "Sightseeing",
-      durationMinutes: 120,
+      activityType: null,
+      durationMinutes: null,
+      durationInferred: true,
+      travelMode: null,
+      intensity: null,
       cost: "Moderate",
       indoorOutdoor: "Mixed",
       locked: false,
@@ -674,46 +923,23 @@ export default function PlanTrip() {
           </div>
         )}
 
-        {showCustomModal && pivotTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }} onClick={() => setShowCustomModal(false)}>
-            <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", width: "90%", maxWidth: "420px", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ fontSize: "18px", fontWeight: "800", color: "var(--text)", marginBottom: "4px" }}>
-                ⚡ Custom Pivot Reason
-              </div>
-              <p style={{ fontSize: "13px", color: "var(--muted)", marginBottom: "16px" }}>
-                Tell TripNow what changed for Day {pivotTarget.dayNumber} {pivotTarget.block}:
-              </p>
-              <input
-                type="text"
-                placeholder="e.g. Too hot outside, need air conditioning"
-                value={customReasonInput}
-                onChange={(e) => setCustomReasonInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && customReasonInput.trim()) {
-                    handleTriggerPivot(pivotTarget.dayNumber, pivotTarget.block, "custom", customReasonInput.trim());
-                  }
-                }}
-                autoFocus
-                style={{ width: "100%", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "14px", outline: "none", fontFamily: "var(--font-ui)", marginBottom: "16px" }}
-              />
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-                <button
-                  onClick={() => { setShowCustomModal(false); setCustomReasonInput(""); }}
-                  style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid var(--border)", background: "#fff", fontWeight: "600", fontSize: "13px", cursor: "pointer" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={!customReasonInput.trim()}
-                  onClick={() => handleTriggerPivot(pivotTarget.dayNumber, pivotTarget.block, "custom", customReasonInput.trim())}
-                  style={{ padding: "8px 18px", borderRadius: "8px", border: "none", background: "var(--amber)", color: "#fff", fontWeight: "700", fontSize: "13px", cursor: customReasonInput.trim() ? "pointer" : "not-allowed", opacity: customReasonInput.trim() ? 1 : 0.6 }}
-                >
-                  Adapt Now →
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <CustomPivotModal
+          isOpen={showCustomModal}
+          target={pivotTarget}
+          destination={tripData?.destination || destination || ""}
+          isLoading={pivotTarget ? Boolean(pivotLoading[`d${pivotTarget.dayNumber}-${pivotTarget.block}`]) : false}
+          errorMessage={pivotError}
+          onClose={() => {
+            setShowCustomModal(false);
+            setPivotTarget(null);
+            setPivotError(null);
+          }}
+          onSubmit={(customReason) => {
+            if (pivotTarget) {
+              handleTriggerPivot(pivotTarget.dayNumber, pivotTarget.block, "custom", customReason);
+            }
+          }}
+        />
 
         <div className="shell">
           <div className="topbar">
@@ -752,6 +978,10 @@ export default function PlanTrip() {
                   <span className="trip-stat-val" style={{ color:"var(--emerald-text)" }}>₹{budget}</span>
                 </div>
                 <div className="trip-stat">
+                  <span className="trip-stat-label">Travelers</span>
+                  <span className="trip-stat-val">{travelers} {travelers === 1 ? "Person" : "People"}</span>
+                </div>
+                <div className="trip-stat">
                   <span className="trip-stat-label">Days</span>
                   <span className="trip-stat-val">{dayCount}</span>
                 </div>
@@ -787,20 +1017,83 @@ export default function PlanTrip() {
                 {!loading && !error && tripData && (
                   <div className="btn-cluster">
                     <button className="btn-pdf" onClick={downloadPDF}>📄 Download PDF</button>
-                    <button className="btn-dashboard" onClick={() => navigate("/dashboard")}>📋 View Dashboard</button>
+                    <button className="btn-dashboard" onClick={() => safeNavigate("/dashboard")}>📋 View Dashboard</button>
                     <button className="btn-dashboard" onClick={() => setEditMode(!editMode)}>
                       {editMode ? "❌ Cancel" : "✏️ Edit Trip"}
                     </button>
                     {editMode && (
-                      <button className="btn-book" onClick={() => { setTripData(editableTrip); setEditMode(false); }}>
-                        💾 Save Changes
+                      <button className="btn-book" onClick={() => { setTripData(editableTrip); setEditMode(false); setIsDirty(true); setSaveStatus("dirty"); }}>
+                        💾 Apply Edits
                       </button>
                     )}
-                    {!editMode && (
+                    {/* Explicit Save Changes Button (Phase 3C) */}
+                    <button
+                      type="button"
+                      onClick={handleSaveItinerary}
+                      disabled={saveStatus === "saving" || (!isDirty && saveStatus === "clean")}
+                      className="btn-book"
+                      style={{
+                        background:
+                          saveStatus === "success"
+                            ? "var(--emerald, #10b981)"
+                            : saveStatus === "conflict"
+                            ? "var(--rose, #f43f5e)"
+                            : isDirty
+                            ? "var(--amber, #f59e0b)"
+                            : "#94a3b8",
+                        cursor: saveStatus === "saving" || (!isDirty && saveStatus === "clean") ? "not-allowed" : "pointer",
+                        opacity: saveStatus === "saving" || (!isDirty && saveStatus === "clean") ? 0.6 : 1,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      {saveStatus === "saving" && (
+                        <>
+                          <span className="inline-block animate-spin">⏳</span>
+                          <span>Saving...</span>
+                        </>
+                      )}
+                      {saveStatus === "success" && (
+                        <>
+                          <span>✅</span>
+                          <span>Saved!</span>
+                        </>
+                      )}
+                      {saveStatus === "conflict" && (
+                        <>
+                          <span>⚡</span>
+                          <span>Conflict — Reload</span>
+                        </>
+                      )}
+                      {saveStatus === "error" && (
+                        <>
+                          <span>⚠️</span>
+                          <span>Retry Save</span>
+                        </>
+                      )}
+                      {saveStatus === "dirty" && (
+                        <>
+                          <span>💾</span>
+                          <span>Save Changes</span>
+                          <span style={{ fontSize: "10px", background: "rgba(0,0,0,0.2)", padding: "1px 5px", borderRadius: "8px" }}>
+                            Unsaved
+                          </span>
+                        </>
+                      )}
+                      {saveStatus === "clean" && (
+                        <>
+                          <span>✓</span>
+                          <span>Changes Saved</span>
+                        </>
+                      )}
+                    </button>
+
+                    {!editMode && !tripId && (
                       <button
                         className="btn-book"
-                        onClick={() => navigate("/booking", {
-                          state: { destination, budget, checkin: startDate, checkout: endDate, tripData }
+                        onClick={() => safeNavigate("/booking", {
+                          state: { destination, budget, checkin: startDate, checkout: endDate, tripData, travelers, guests: travelers }
                         })}
                       >
                         ✈️ Save This Trip →
@@ -809,6 +1102,36 @@ export default function PlanTrip() {
                   </div>
                 )}
               </div>
+
+              {/* ⚠️ Phase 3C Conflict & Error Banners */}
+              {saveStatus === "conflict" && (
+                <div className="p-4 mb-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 flex items-center justify-between" style={{ fontFamily: "var(--font-ui)" }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">⚡</span>
+                    <span className="text-sm font-semibold">
+                      {saveErrorMessage || "This trip was modified in another window. Reload to see the latest version."}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleReloadLatest}
+                    className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition"
+                  >
+                    Reload Latest Version
+                  </button>
+                </div>
+              )}
+
+              {saveStatus === "error" && saveErrorMessage && (
+                <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between" style={{ fontFamily: "var(--font-ui)" }}>
+                  <span>⚠️ {saveErrorMessage}</span>
+                  <button
+                    onClick={handleSaveItinerary}
+                    className="px-2.5 py-1 bg-rose-600 text-white text-[11px] font-bold rounded hover:bg-rose-700"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
 
               {/* ✅ UPDATED LOADING SKELETON */}
               {loading && !showSuccess && (
@@ -844,113 +1167,12 @@ export default function PlanTrip() {
 
               {!loading && !showSuccess && !error && tripData && (
                 <>
-                  {/* ── REALITY SCORE BANNER (PHASE 3) ── */}
-                  {realityReport && (
-                    <div style={{
-                      background: "rgba(255, 255, 255, 0.9)",
-                      backdropFilter: "blur(16px)",
-                      borderRadius: "14px",
-                      padding: "16px 20px",
-                      marginBottom: "16px",
-                      border: `1px solid ${realityReport.color || "rgba(16, 185, 129, 0.3)"}`,
-                      boxShadow: "0 4px 20px rgba(0, 0, 0, 0.03)",
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                          <div style={{
-                            width: "52px",
-                            height: "52px",
-                            borderRadius: "12px",
-                            background: realityReport.color ? `${realityReport.color}15` : "rgba(16, 185, 129, 0.1)",
-                            color: realityReport.color || "#059669",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            border: `1.5px solid ${realityReport.color || "#059669"}`,
-                            flexShrink: 0,
-                          }}>
-                            <span style={{ fontSize: "20px", fontWeight: "900", lineHeight: "1", fontFamily: "var(--font-ui)" }}>
-                              {realityReport.score}
-                            </span>
-                            <span style={{ fontSize: "9px", fontWeight: "700", opacity: 0.8, textTransform: "uppercase", marginTop: "2px" }}>
-                              Score
-                            </span>
-                          </div>
-                          <div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                              <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--text)" }}>
-                                ⭐ Trip Reality Score
-                              </span>
-                              <span style={{
-                                fontSize: "11px",
-                                fontWeight: "800",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.06em",
-                                padding: "2px 8px",
-                                borderRadius: "4px",
-                                background: realityReport.color ? `${realityReport.color}20` : "rgba(16, 185, 129, 0.15)",
-                                color: realityReport.color || "#059669",
-                              }}>
-                                {realityReport.status}
-                              </span>
-                              {realityLoading && (
-                                <span style={{ fontSize: "11px", color: "var(--dim)" }}>⚡ Recalculating...</span>
-                              )}
-                            </div>
-                            <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "2px" }}>
-                              Deterministic verification across time windows, activity buffers, budget allowance, and daily workload
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => setShowRealityModal(true)}
-                          style={{
-                            background: "var(--surface)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "8px",
-                            padding: "7px 16px",
-                            fontSize: "12px",
-                            fontWeight: "600",
-                            color: "var(--text)",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                          }}
-                        >
-                          🔍 View Breakdown
-                        </button>
-                      </div>
-
-                      {/* Sub-scores strip */}
-                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginTop: "12px", paddingTop: "12px", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
-                        <div style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.03)", color: "var(--muted)", fontWeight: "500" }}>
-                          ⏱️ Time Feasibility: <b style={{ color: "var(--text)" }}>{realityReport.subScores?.timeFeasibility ?? "—"}/100</b>
-                        </div>
-                        <div style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.03)", color: "var(--muted)", fontWeight: "500" }}>
-                          💰 Budget Feasibility: <b style={{ color: "var(--text)" }}>{realityReport.subScores?.budgetFeasibility ?? "—"}/100</b>
-                        </div>
-                        <div style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.03)", color: "var(--muted)", fontWeight: "500" }}>
-                          🏃 Pace: <b style={{ color: "var(--text)" }}>{realityReport.metrics?.paceCategory || "Balanced"}</b>
-                        </div>
-                        <div style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.03)", color: "var(--muted)", fontWeight: "500" }}>
-                          🗺️ Route: <span style={{ color: "var(--dim)" }}>{realityReport.subScores?.routeEfficiency !== null ? `${realityReport.subScores?.routeEfficiency}/100` : "Stage A (Awaiting Coords)"}</span>
-                        </div>
-
-                        {realityReport.issues && realityReport.issues.length > 0 ? (
-                          <div style={{ marginLeft: "auto", fontSize: "11px", color: "#b45309", fontWeight: "600" }}>
-                            ⚠️ {realityReport.issues.length} {realityReport.issues.length === 1 ? "issue" : "issues"} detected
-                          </div>
-                        ) : (
-                          <div style={{ marginLeft: "auto", fontSize: "11px", color: "var(--emerald-text)", fontWeight: "600" }}>
-                            ✨ All constraints verified
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* ── REALITY SCORE BANNER (PHASE 5F.4) ── */}
+                  <RealityScoreBanner
+                    realityReport={realityReport}
+                    isLoading={realityLoading}
+                    onViewDetails={() => setShowRealityModal(true)}
+                  />
 
                   <div className="tabs">
                     {["Itinerary","Map","Budget","Food & Stays","Tips"].map(tab => (
@@ -1097,7 +1319,7 @@ export default function PlanTrip() {
                                                   className="pivot-option"
                                                   style={{ borderTop: "1px solid rgba(0,0,0,0.06)", marginTop: "4px" }}
                                                   onClick={() => {
-                                                    setPivotTarget({ dayNumber: day.day, block: key });
+                                                    setPivotTarget({ dayNumber: day.day, block: key, currentActivityTitle: activity?.title || "" });
                                                     setShowCustomModal(true);
                                                     setActivePivotMenu(null);
                                                   }}
@@ -1132,28 +1354,7 @@ export default function PlanTrip() {
                                       <>
                                         <div className="slot-text">{safeString(day[key])}</div>
                                         {activity && (
-                                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
-                                            {activity.category && (
-                                              <span className="activity-meta-pill" style={{ background: "rgba(217, 119, 6, 0.08)", color: "#b45309" }}>
-                                                🏷️ {activity.category}
-                                              </span>
-                                            )}
-                                            {activity.durationMinutes && (
-                                              <span className="activity-meta-pill" style={{ background: "rgba(5, 150, 105, 0.08)", color: "#047857" }}>
-                                                ⏱️ {activity.durationMinutes}m
-                                              </span>
-                                            )}
-                                            {activity.indoorOutdoor && (
-                                              <span className="activity-meta-pill" style={{ background: "rgba(79, 70, 229, 0.08)", color: "#4338ca" }}>
-                                                {activity.indoorOutdoor === "Indoor" ? "🏠 Indoor" : activity.indoorOutdoor === "Outdoor" ? "☀️ Outdoor" : "⛅ Mixed"}
-                                              </span>
-                                            )}
-                                            {activity.cost && (
-                                              <span className="activity-meta-pill" style={{ background: "rgba(107, 114, 128, 0.08)", color: "#374151" }}>
-                                                💰 {activity.cost}
-                                              </span>
-                                            )}
-                                          </div>
+                                          <ActivityMetadataBadges activity={activity} />
                                         )}
                                         {adaptedBadges[slotKey] && (
                                           <div className="adapted-badge">{adaptedBadges[slotKey]}</div>
@@ -1177,19 +1378,36 @@ export default function PlanTrip() {
                       </>
                     )}
 
-                    {activeTab === "Budget" && tripData.budgetBreakdown && (
+                    {activeTab === "Budget" && (
                       <>
-                        <div className="section-head">Budget breakdown</div>
-                        <div className="budget-grid">
-                          {Object.entries(tripData.budgetBreakdown).map(([key, val]) => (
-                            <div key={key} className={`budget-row ${key.toLowerCase().includes("total") ? "budget-total" : ""}`}>
-                              <span style={{ textTransform:"capitalize", fontWeight:"600", color:"var(--muted)" }}>
-                                {safeString(key).replace(/([A-Z])/g," $1").trim()}
-                              </span>
-                              <span style={{ fontWeight:"700", color:"var(--emerald-text)" }}>{safeString(val)}</span>
-                            </div>
-                          ))}
+                        <div className="section-head">Economic Intelligence & Viability</div>
+                        <div style={{ marginBottom: "28px" }}>
+                          <BudgetIntelligencePanel
+                            destination={destination}
+                            totalBudget={budget}
+                            days={dayCount}
+                            guests={travelers}
+                            currency="INR"
+                            showBreakdown={true}
+                            showDisclaimer={true}
+                          />
                         </div>
+
+                        {tripData.budgetBreakdown && (
+                          <>
+                            <div className="section-head">AI-Estimated Activity Cost Breakdown</div>
+                            <div className="budget-grid">
+                              {Object.entries(tripData.budgetBreakdown).map(([key, val]) => (
+                                <div key={key} className={`budget-row ${key.toLowerCase().includes("total") ? "budget-total" : ""}`}>
+                                  <span style={{ textTransform:"capitalize", fontWeight:"600", color:"var(--muted)" }}>
+                                    {safeString(key).replace(/([A-Z])/g," $1").trim()}
+                                  </span>
+                                  <span style={{ fontWeight:"700", color:"var(--emerald-text)" }}>{safeString(val)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
 
@@ -1254,236 +1472,24 @@ export default function PlanTrip() {
         </div>
       </div>
 
-      {/* ── REALITY SCORE DETAILS MODAL (PHASE 3) ── */}
-      {showRealityModal && realityReport && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            background: "rgba(0, 0, 0, 0.4)",
-            backdropFilter: "blur(6px)",
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setShowRealityModal(false)}
-        >
-          <div
-            style={{
-              background: "#FFFFFF",
-              borderRadius: "16px",
-              width: "100%",
-              maxWidth: "600px",
-              maxHeight: "85vh",
-              overflowY: "auto",
-              boxShadow: "0 25px 50px rgba(0,0,0,0.15)",
-              border: "1px solid rgba(0,0,0,0.08)",
-              padding: "24px",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", borderBottom: "1px solid rgba(0,0,0,0.06)", paddingBottom: "12px" }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "800", color: "var(--text)" }}>
-                  ⭐ Reality Verification Breakdown
-                </h3>
-                <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--muted)" }}>
-                  Deterministic evaluation by TripNow Reality Engine
-                </p>
-              </div>
-              <button
-                onClick={() => setShowRealityModal(false)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: "18px",
-                  color: "var(--muted)",
-                  cursor: "pointer",
-                  padding: "4px 8px",
-                  borderRadius: "4px",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Score Header */}
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              background: realityReport.color ? `${realityReport.color}10` : "rgba(16, 185, 129, 0.08)",
-              padding: "16px",
-              borderRadius: "12px",
-              border: `1px solid ${realityReport.color || "#059669"}30`,
-              marginBottom: "20px",
-            }}>
-              <div>
-                <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>
-                  Overall Reality Score
-                </span>
-                <div style={{ fontSize: "32px", fontWeight: "900", color: realityReport.color || "var(--emerald-text)" }}>
-                  {realityReport.score} <span style={{ fontSize: "18px", fontWeight: "600", color: "var(--muted)" }}>/ 100</span>
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <span style={{
-                  fontSize: "12px",
-                  fontWeight: "800",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  padding: "4px 12px",
-                  borderRadius: "6px",
-                  background: realityReport.color || "#059669",
-                  color: "#FFFFFF",
-                }}>
-                  {realityReport.status}
-                </span>
-                <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "6px" }}>
-                  {realityReport.metrics?.lockedActivityCount || 0} Locked {(realityReport.metrics?.lockedActivityCount === 1) ? "Anchor" : "Anchors"}
-                </div>
-              </div>
-            </div>
-
-            {/* Sub-scores Breakdown */}
-            <div style={{ marginBottom: "20px" }}>
-              <h4 style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "12px" }}>
-                Sub-Score Analysis
-              </h4>
-              <div style={{ display: "grid", gap: "10px" }}>
-                <div style={{ background: "rgba(0,0,0,0.02)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.04)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>
-                    <span>⏱️ Time Feasibility</span>
-                    <span style={{ color: "var(--text)" }}>{realityReport.subScores?.timeFeasibility ?? "—"}/100</span>
-                  </div>
-                  <div style={{ height: "6px", background: "rgba(0,0,0,0.06)", borderRadius: "3px", overflow: "hidden" }}>
-                    <div style={{ width: `${realityReport.subScores?.timeFeasibility || 0}%`, height: "100%", background: "#059669", borderRadius: "3px" }} />
-                  </div>
-                </div>
-
-                <div style={{ background: "rgba(0,0,0,0.02)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.04)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>
-                    <span>💰 Budget Feasibility</span>
-                    <span style={{ color: "var(--text)" }}>{realityReport.subScores?.budgetFeasibility ?? "—"}/100</span>
-                  </div>
-                  <div style={{ height: "6px", background: "rgba(0,0,0,0.06)", borderRadius: "3px", overflow: "hidden" }}>
-                    <div style={{ width: `${realityReport.subScores?.budgetFeasibility || 0}%`, height: "100%", background: "#10B981", borderRadius: "3px" }} />
-                  </div>
-                </div>
-
-                <div style={{ background: "rgba(0,0,0,0.02)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.04)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>
-                    <span>🏃 Pacing & Daily Load ({realityReport.metrics?.paceCategory || "Balanced"})</span>
-                    <span style={{ color: "var(--text)" }}>{realityReport.subScores?.activityLoad ?? "—"}/100</span>
-                  </div>
-                  <div style={{ height: "6px", background: "rgba(0,0,0,0.06)", borderRadius: "3px", overflow: "hidden" }}>
-                    <div style={{ width: `${realityReport.subScores?.activityLoad || 0}%`, height: "100%", background: "#D97706", borderRadius: "3px" }} />
-                  </div>
-                </div>
-
-                <div style={{ background: "rgba(0,0,0,0.02)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(0,0,0,0.04)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600", marginBottom: "6px" }}>
-                    <span>🗺️ Route & Distance Efficiency</span>
-                    <span style={{ color: "var(--muted)", fontSize: "12px" }}>
-                      {realityReport.subScores?.routeEfficiency !== null ? `${realityReport.subScores?.routeEfficiency}/100` : "Stage A (Awaiting Coords)"}
-                    </span>
-                  </div>
-                  <div style={{ height: "6px", background: "rgba(0,0,0,0.06)", borderRadius: "3px", overflow: "hidden" }}>
-                    <div style={{ width: realityReport.subScores?.routeEfficiency ? `${realityReport.subScores.routeEfficiency}%` : "100%", height: "100%", background: "rgba(0,0,0,0.15)", borderRadius: "3px" }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Detected Issues */}
-            <div>
-              <h4 style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "12px" }}>
-                Friction Warnings & Feasibility Issues ({realityReport.issues?.length || 0})
-              </h4>
-              {(!realityReport.issues || realityReport.issues.length === 0) ? (
-                <div style={{ padding: "14px", background: "rgba(16, 185, 129, 0.08)", borderRadius: "8px", color: "var(--emerald-text)", fontSize: "13px", fontWeight: "500" }}>
-                  ✨ No feasibility issues detected. Your itinerary has comfortable buffers, balanced pacing, and realistic costs.
-                </div>
-              ) : (
-                <div style={{ display: "grid", gap: "10px" }}>
-                  {realityReport.issues.map((iss, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        padding: "12px 14px",
-                        borderRadius: "8px",
-                        background: iss.severity === "high" ? "rgba(225, 29, 72, 0.06)" : "rgba(245, 158, 11, 0.08)",
-                        border: `1px solid ${iss.severity === "high" ? "rgba(225, 29, 72, 0.2)" : "rgba(245, 158, 11, 0.2)"}`,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                        <span style={{
-                          fontSize: "10px",
-                          fontWeight: "800",
-                          textTransform: "uppercase",
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          background: iss.severity === "high" ? "var(--rose)" : "var(--amber)",
-                          color: "#FFFFFF",
-                        }}>
-                          {iss.severity}
-                        </span>
-                        {iss.day && (
-                          <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--muted)" }}>
-                            Day {iss.day} {iss.period ? `· ${iss.period}` : ""}
-                          </span>
-                        )}
-                        {iss.isLocked && (
-                          <span style={{
-                            fontSize: "10px",
-                            fontWeight: "700",
-                            background: "rgba(0,0,0,0.08)",
-                            color: "var(--text)",
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            marginLeft: "auto",
-                          }}>
-                            🔒 Locked Anchor
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: "12px", color: "var(--text)", lineHeight: "1.5" }}>
-                        {iss.message}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginTop: "20px", textAlign: "right" }}>
-              <button
-                onClick={() => setShowRealityModal(false)}
-                style={{
-                  background: "var(--text)",
-                  color: "#FFFFFF",
-                  border: "none",
-                  borderRadius: "8px",
-                  padding: "8px 20px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-ui)",
-                }}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── REALITY SCORE DETAILS MODAL (PHASE 5F.4) ── */}
+      <RealityScoreModal
+        isOpen={showRealityModal}
+        onClose={() => setShowRealityModal(false)}
+        realityReport={realityReport}
+      />
 
       {/* ── FIX MY DAY MODAL (PHASE 4) ── */}
+      {/* Phase 3C.1: Authentication Prompt Modal */}
+      <AuthPromptModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        tripId={tripId}
+        stagedTrip={tripData}
+        destination={destination}
+        onAuthSuccess={handleAuthSuccess}
+      />
+
       {showFixDayModal && (
         <div
           style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", background:"rgba(0,0,0,0.4)", backdropFilter:"blur(6px)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}
@@ -1639,6 +1645,37 @@ export default function PlanTrip() {
                   </div>
                 )}
 
+                {/* Fix Day Budget Context Strip (Phase 5E.5) */}
+                {(() => {
+                  const bGuidance = fixDayPreview.budgetGuidance || (destination && budget ? (() => {
+                    const res = calculateBudgetIntelligence({ destination, totalBudget: budget, days: dayCount, guests: travelers, currency: "INR" });
+                    return res && (res.status === "CALCULATED" || res.status === "OK") ? {
+                      dailyPerPerson: res.dailyPerPerson,
+                      comfortCategory: res.category,
+                      destinationTier: res.tier,
+                      qualitativeNote: "Activity venue costs are qualitative estimates and do not alter your total trip budget."
+                    } : null;
+                  })() : null);
+
+                  if (!bGuidance) return null;
+
+                  return (
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px", background:"rgba(245,158,11,0.06)", border:"1px solid rgba(245,158,11,0.25)", borderRadius:"12px", padding:"10px 14px", marginBottom:"16px", flexWrap:"wrap" }}>
+                      <div>
+                        <div style={{ fontSize:"10px", fontWeight:"700", textTransform:"uppercase", letterSpacing:"0.06em", color:"var(--amber-text)" }}>
+                          💰 Budget Context (Reference Baseline)
+                        </div>
+                        <div style={{ fontSize:"13px", fontWeight:"700", color:"var(--text)", marginTop:"2px" }}>
+                          ₹{typeof bGuidance.dailyPerPerson === "number" ? bGuidance.dailyPerPerson.toLocaleString("en-IN") : bGuidance.dailyPerPerson}/day per person · <span style={{ textTransform:"capitalize", color:"var(--muted)", fontWeight:"600" }}>{bGuidance.comfortCategory}</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize:"11px", color:"var(--muted)", textAlign:"right", maxWidth:"260px" }}>
+                        Tier {bGuidance.destinationTier} destination · {bGuidance.qualitativeNote}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* FIXDAY_SLOTS */}
                 <div style={{ fontSize:"11px", fontWeight:"800", color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"10px" }}>
                   Proposed day
@@ -1668,34 +1705,35 @@ export default function PlanTrip() {
                           <div>
                             <div style={{ fontSize:"12px", color:"var(--muted)", textDecoration:"line-through", opacity:0.75 }}>
                               {slot.originalActivity?.title}
-                              {slot.originalActivity?.durationMinutes ? ` · ${slot.originalActivity.durationMinutes}m` : ""}
                             </div>
-                            <div style={{ fontSize:"14px", color:"var(--dim)", lineHeight:"1", margin:"2px 0" }}>↓</div>
+                            {slot.originalActivity && (
+                              <ActivityMetadataBadges activity={slot.originalActivity} compact style={{ opacity: 0.75 }} />
+                            )}
+                            <div style={{ fontSize:"14px", color:"var(--dim)", lineHeight:"1", margin:"4px 0 2px" }}>↓</div>
                             <div style={{ fontSize:"13px", fontWeight:"700", color:"var(--text)" }}>
                               {slot.replacementActivity?.title}
                             </div>
                             {slot.replacementActivity?.description && (
                               <div style={{ fontSize:"12px", color:"var(--muted)", marginTop:"2px" }}>{slot.replacementActivity.description}</div>
                             )}
-                            <div style={{ display:"flex", flexWrap:"wrap", gap:"6px", marginTop:"6px" }}>
-                              {slot.replacementActivity?.category && (
-                                <span className="activity-meta-pill" style={{ background:"rgba(217,119,6,0.08)", color:"#b45309" }}>🏷️ {slot.replacementActivity.category}</span>
-                              )}
-                              {slot.replacementActivity?.durationMinutes && (
-                                <span className="activity-meta-pill" style={{ background:"rgba(5,150,105,0.08)", color:"#047857" }}>⏱️ {slot.replacementActivity.durationMinutes}m</span>
-                              )}
-                              {slot.replacementActivity?.indoorOutdoor && (
-                                <span className="activity-meta-pill" style={{ background:"rgba(79,70,229,0.08)", color:"#4338ca" }}>{slot.replacementActivity.indoorOutdoor}</span>
-                              )}
-                              {slot.replacementActivity?.cost && (
-                                <span className="activity-meta-pill" style={{ background:"rgba(107,114,128,0.08)", color:"#374151" }}>💰 {slot.replacementActivity.cost}</span>
-                              )}
-                            </div>
+                            {slot.replacementActivity && (
+                              <ActivityMetadataBadges activity={slot.replacementActivity} />
+                            )}
+                            {slot.replacementActivity?.cost && (
+                              <div style={{ fontSize:"11px", color:"var(--muted)", marginTop:"4px", display:"flex", alignItems:"center", gap:"6px" }}>
+                                <span style={{ fontWeight:"600", color:"var(--amber-text)" }}>Est. Cost:</span>
+                                <span>{slot.replacementActivity.cost} (venue estimate)</span>
+                              </div>
+                            )}
                           </div>
                         ) : (
-                          <div style={{ fontSize:"13px", fontWeight:"500", color:"var(--text)" }}>
-                            {slot.activity?.title}
-                            {slot.activity?.durationMinutes ? <span style={{ color:"var(--muted)" }}> · {slot.activity.durationMinutes}m</span> : null}
+                          <div>
+                            <div style={{ fontSize:"13px", fontWeight:"500", color:"var(--text)" }}>
+                              {slot.activity?.title}
+                            </div>
+                            {slot.activity && (
+                              <ActivityMetadataBadges activity={slot.activity} compact />
+                            )}
                           </div>
                         )}
                       </div>
@@ -1734,100 +1772,6 @@ export default function PlanTrip() {
         </div>
       )}
 
-      {/* ── CUSTOM REASON MODAL ── */}
-      {showCustomModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            background: "rgba(0, 0, 0, 0.4)",
-            backdropFilter: "blur(4px)",
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setShowCustomModal(false)}
-        >
-          <div
-            style={{
-              background: "#FFFFFF",
-              borderRadius: "14px",
-              width: "100%",
-              maxWidth: "460px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
-              border: "1px solid rgba(0,0,0,0.08)",
-              padding: "20px",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: "700", color: "var(--text)" }}>
-              ✏️ Custom Pivot Reason
-            </h3>
-            <p style={{ margin: "0 0 14px", fontSize: "12px", color: "var(--muted)" }}>
-              Describe what changed (e.g., "Too hot outside", "Need kid-friendly place")
-            </p>
-            <textarea
-              value={customReasonInput}
-              onChange={(e) => setCustomReasonInput(e.target.value)}
-              placeholder="Enter reason..."
-              style={{
-                width: "100%",
-                minHeight: "80px",
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid var(--border)",
-                fontSize: "13px",
-                fontFamily: "var(--font-ui)",
-                resize: "vertical",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "14px" }}>
-              <button
-                onClick={() => setShowCustomModal(false)}
-                style={{
-                  background: "none",
-                  border: "1px solid var(--border)",
-                  borderRadius: "6px",
-                  padding: "8px 14px",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                  fontWeight: "600",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (pivotTarget) {
-                    handleTriggerPivot(pivotTarget.dayNumber, pivotTarget.block, "custom", customReasonInput);
-                  }
-                }}
-                disabled={!customReasonInput.trim()}
-                style={{
-                  background: "var(--amber)",
-                  color: "#FFFFFF",
-                  border: "none",
-                  borderRadius: "6px",
-                  padding: "8px 16px",
-                  fontSize: "12px",
-                  cursor: customReasonInput.trim() ? "pointer" : "not-allowed",
-                  fontWeight: "700",
-                  opacity: customReasonInput.trim() ? 1 : 0.6,
-                }}
-              >
-                Adapt Now →
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

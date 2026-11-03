@@ -1,5 +1,20 @@
 const mongoose = require("mongoose");
 
+// Mongoose connection lifecycle listeners for production observability (ARCH-10)
+if (mongoose.connection && mongoose.connection.listenerCount("error") === 0) {
+  mongoose.connection.on("error", (err) => {
+    console.error("MongoDB connection error:", err.message);
+  });
+  mongoose.connection.on("disconnected", () => {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn("MongoDB connection disconnected.");
+    }
+  });
+  mongoose.connection.on("reconnected", () => {
+    console.log("MongoDB connection reconnected.");
+  });
+}
+
 const connectDB = async () => {
   const uri = process.env.MONGO_URI;
   try {

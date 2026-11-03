@@ -1,7 +1,7 @@
 const request = require("supertest");
 const app = require("../app");
 const User = require("../models/User");
-const { connect, clearDatabase, closeDatabase } = require("./db");
+const { connect, clearDatabase, closeDatabase, extractToken } = require("./db");
 
 beforeAll(async () => { await connect(); });
 afterEach(async () => { await clearDatabase(); });
@@ -10,7 +10,7 @@ afterAll(async () => { await closeDatabase(); });
 const signup = async (over = {}) => {
   const user = { name: "User", email: "user@example.com", password: "Passw0rd", ...over };
   const res = await request(app).post("/api/auth/signup").send(user);
-  return { token: res.body.data.token, email: user.email, password: user.password };
+  return { token: extractToken(res), email: user.email, password: user.password };
 };
 
 describe("Admin authorization — GET /api/admin/bookings", () => {
@@ -39,7 +39,7 @@ describe("Admin authorization — GET /api/admin/bookings", () => {
 
     const res = await request(app)
       .get("/api/admin/bookings")
-      .set("Authorization", `Bearer ${login.body.data.token}`);
+      .set("Authorization", `Bearer ${extractToken(login)}`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);

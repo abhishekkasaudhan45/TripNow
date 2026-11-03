@@ -267,7 +267,7 @@ describe("POST /api/ai - Google Gemini Integration", () => {
     createSpy.mockRestore();
   });
 
-  it("falls back to gemini-3.6-flash ONLY when model returns the specific 'no longer available to new users' error", async () => {
+  it("falls back to gemini-3.5-flash-lite ONLY when model returns the specific 'no longer available to new users' error", async () => {
     const origModel = env.geminiModel;
     env.geminiModel = "gemini-2.5-flash";
 
@@ -295,7 +295,7 @@ describe("POST /api/ai - Google Gemini Integration", () => {
     expect(res.body.success).toBe(true);
     expect(generateContentMock).toHaveBeenCalledTimes(2);
     expect(generateContentMock.mock.calls[0][0].model).toBe("gemini-2.5-flash");
-    expect(generateContentMock.mock.calls[1][0].model).toBe("gemini-3.6-flash");
+    expect(generateContentMock.mock.calls[1][0].model).toBe("gemini-3.5-flash-lite");
 
     env.geminiModel = origModel;
   });

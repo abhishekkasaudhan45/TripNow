@@ -1,12 +1,13 @@
 const express = require("express");
 
 // Imports
-const authRoutes      = require("./authRoutes");
-const adminRoutes     = require("./adminRoutes");
-const aiRoutes        = require("./aiRoutes");       
-const tripRoutes      = require("./tripRoutes");
-const bookingRoutes   = require("./bookingRoutes");
-const sharedTripRoutes = require("./SharedTripRoute"); // ✅ Now has an "s"
+const authRoutes       = require("./authRoutes");
+const adminRoutes      = require("./adminRoutes");
+const aiRoutes         = require("./aiRoutes");
+const bookingRoutes    = require("./bookingRoutes");
+const budgetRoutes     = require("./budgetRoutes");
+const sharedTripRoutes = require("./SharedTripRoute");
+const { getCsrfTokenHandler } = require("../middleware/csrf");
 const router = express.Router();
 
 // Root test
@@ -14,12 +15,16 @@ router.get("/", (req, res) => {
   res.json({ message: "API working ✅" });
 });
 
+// 🛡️ CSRF Token Issuance
+router.get("/csrf-token", getCsrfTokenHandler);
+
 // Standard Routes
 router.use("/auth", authRoutes);
 router.use("/admin", adminRoutes);
 router.use("/ai", aiRoutes);                  
-router.use("/trips", tripRoutes);
-router.use("/bookings/shared", sharedTripRoutes); // ✅ Perfectly matches the "s" from above!
+router.use("/budget", budgetRoutes);
+router.use("/bookings/shared", sharedTripRoutes); // ✅ Standard booking share path
+router.use("/shared", sharedTripRoutes);          // 🔒 Alias for /api/shared/:id
 router.use("/bookings", bookingRoutes);          
 
 module.exports = router;

@@ -1,36 +1,23 @@
 // frontend/src/layouts/Header.jsx
-// CHANGES:
-//   ✅ Reads user name from localStorage "user" key (saved by Login/Signup)
-//   ✅ Displays user's first name next to their avatar near logout button
+// Reads user name from user storage (saved by Login/Signup)
+// Displays user's first name next to their avatar near logout button
 
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import api from "../lib/api";
+import { getUser, clearAuth } from "../utils/auth";
+import TripNowLogo from "../components/common/TripNowLogo";
 
 function Header() {
   const navigate  = useNavigate();
   const location  = useLocation();
 
-  const getToken = () =>
-    localStorage.getItem("token") || sessionStorage.getItem("token");
-
-  // ✅ Read user object saved by Login/Signup: { id, name, email, role }
-  const getUser = () => {
-    try {
-      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const [token, setToken]   = useState(getToken());
-  const [user, setUser]     = useState(getUser());
+  const [user, setUser]         = useState(getUser());
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Re-read token + user on every route change
+  // Re-read user profile on every route change
   useEffect(() => {
-    setToken(getToken());
     setUser(getUser());
   }, [location.pathname]);
 
@@ -40,12 +27,11 @@ function Header() {
     return () => window.removeEventListener("scroll", fn);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-    setToken(null);
+  const handleLogout = async () => {
+    try {
+      await api.post("/api/auth/logout");
+    } catch (_) {}
+    clearAuth();
     setUser(null);
     navigate("/");
   };
@@ -58,15 +44,15 @@ function Header() {
     { label: "Plan Trip", path: "/plan-trip" },
     { label: "Save Trip", path: "/booking" },
     { label: "Dashboard", path: "/dashboard" },
-    ...(token && user?.role === "admin" ? [{ label: "Admin", path: "/admin" }] : []),
+    ...(user && user.role === "admin" ? [{ label: "Admin", path: "/admin" }] : []),
   ];
 
-  // ✅ Get first name only for display
+  // Get first name only for display
   const displayName = user?.name
     ? user.name.split(" ")[0]
     : user?.email?.split("@")[0] || "User";
 
-  // ✅ Avatar initials
+  // Avatar initials
   const initials = user?.name
     ? user.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
     : "U";
@@ -81,7 +67,7 @@ function Header() {
         .hn-btn { transition:transform 0.15s,box-shadow 0.15s; font-family:'DM Sans',sans-serif; cursor:pointer; font-weight:700; border:none; }
         .hn-btn:hover { transform:translateY(-1px); }
 
-        /* ✅ User chip — name + avatar */
+        /* User chip — name + avatar */
         .hn-user-chip {
           display: flex;
           align-items: center;
@@ -125,13 +111,8 @@ function Header() {
         }}>
 
           {/* Logo */}
-          <div onClick={() => navigate("/")} style={{ display:"flex", alignItems:"center", gap:"10px", cursor:"pointer" }}>
-            <div style={{ width:"36px", height:"36px", borderRadius:"12px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontWeight:900, fontSize:"16px", boxShadow:"0 3px 12px rgba(239,68,68,0.32)" }}>
-              ✦
-            </div>
-            <span style={{ fontFamily:"'Playfair Display',serif", fontWeight:900, fontSize:"20px", color:"#111827", letterSpacing:"-0.5px" }}>
-              TripNow
-            </span>
+          <div onClick={() => navigate("/")} style={{ cursor:"pointer" }}>
+            <TripNowLogo size={36} />
           </div>
 
           {/* Desktop nav */}
@@ -150,7 +131,7 @@ function Header() {
 
           {/* Auth area */}
           <div style={{ display:"flex", gap:"10px", alignItems:"center" }}>
-            {!token ? (
+            {!user ? (
               <>
                 <button className="hn-btn" onClick={() => navigate("/login")}
                   style={{ padding:"9px 20px", borderRadius:"12px", border:"1.5px solid rgba(0,0,0,0.11)", background:"transparent", fontSize:"14px", color:"#374151" }}>
@@ -163,9 +144,22 @@ function Header() {
               </>
             ) : (
               <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
-                {/* ✅ User chip with name */}
+                {/* User chip with name */}
                 <div className="hn-user-chip">
-                  <div className="hn-avatar">{initials}</div>
+                  <div className="hn-avatar" style={{ overflow: "hidden" }}>
+                    {user?.avatar ? (
+                      <img
+                        src={user.avatar}
+                        alt={displayName}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      initials
+                    )}
+                  </div>
                   <span className="hn-username">{displayName}</span>
                 </div>
 
@@ -187,7 +181,7 @@ function Header() {
         {/* Mobile dropdown */}
         {menuOpen && (
           <div style={{ background:"rgba(255,255,255,0.97)", backdropFilter:"blur(20px)", borderTop:"1px solid rgba(0,0,0,0.06)", padding:"12px 24px 20px" }}>
-            {token && user && (
+            {user && (
               <div style={{ padding:"12px 0 8px", borderBottom:"1px solid rgba(0,0,0,0.06)", marginBottom:"4px", display:"flex", alignItems:"center", gap:"10px" }}>
                 <div className="hn-avatar">{initials}</div>
                 <div>
@@ -203,7 +197,7 @@ function Header() {
                 {l.label}
               </div>
             ))}
-            {!token ? (
+            {!user ? (
               <div style={{ display:"flex", gap:"10px", marginTop:"16px" }}>
                 <button onClick={() => { navigate("/login"); setMenuOpen(false); }}
                   style={{ flex:1, padding:"12px", borderRadius:"12px", border:"1.5px solid rgba(0,0,0,0.11)", background:"transparent", fontWeight:700, fontSize:"14px", cursor:"pointer" }}>

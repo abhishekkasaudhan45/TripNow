@@ -11,21 +11,18 @@
 
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
-import { getAllTrips, deleteTrip, updateTrip } from "../services/bookingService";
+import { getAllTrips, deleteTrip, updateTrip, shareTrip } from "../services/bookingService";
 
 import { TripSkeleton } from "../components/Skeletons";
 import Search from "../components/Search";
+import ActivityMetadataBadges, { hasActivityMetadata } from "../components/ActivityMetadataBadges";
+import TripNowLogo from "../components/common/TripNowLogo";
+import api from "../lib/api";
+import { getUser, saveAuth, clearAuth } from "../utils/auth";
 
 // ── Auth helper ───────────────────────────────────────────────────────────
-function getStoredUser() {
-  try {
-    const raw = sessionStorage.getItem("user") || localStorage.getItem("user") || "";
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-function getStoredToken() {
-  return sessionStorage.getItem("token") || localStorage.getItem("token") || "";
-}
+const getStoredUser = () => getUser();
+const getStoredToken = () => "";
 
 // ── Formatters ────────────────────────────────────────────────────────────
 function formatDate(d) {
@@ -215,15 +212,13 @@ function ProfilePanel({ user: initialUser, tripCount, onClose }) {
   useEffect(() => {
     if (!initialUser?.email || !initialUser?.role) {
       setFetching(true);
-      const token = sessionStorage.getItem("token") || localStorage.getItem("token") || "";
-      fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(d => {
-          const freshUser = d?.data?.user || d?.data || d?.user || null;
+
+      api.get("/api/auth/me")
+        .then(res => {
+          const freshUser = res.data?.data?.user || res.data?.user || null;
           if (freshUser) {
             setUser(freshUser);
-            const storage = sessionStorage.getItem("token") ? sessionStorage : localStorage;
-            storage.setItem("user", JSON.stringify(freshUser));
+            saveAuth({ user: freshUser });
           }
         })
         .catch(() => {})
@@ -236,10 +231,11 @@ function ProfilePanel({ user: initialUser, tripCount, onClose }) {
   const role     = user?.role     || "user";
   const initials = name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase();
 
-  const handleLogout = () => {
-    sessionStorage.clear();
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+  const handleLogout = async () => {
+    try {
+      await api.post("/api/auth/logout");
+    } catch (_) {}
+    clearAuth();
     window.location.href = "/login";
   };
 
@@ -372,6 +368,36 @@ const TripCard = memo(function TripCard({ trip, index, onView, onDelete, onShare
   const emoji = getDestinationEmoji(trip.destination);
   const isAI  = !!trip.aiPlan;
 
+  const previewActivity = useMemo(() => {
+    if (!trip?.aiPlan) return null;
+    let plan = trip.aiPlan;
+    if (typeof plan === "string") {
+      try {
+        plan = JSON.parse(plan);
+      } catch {
+        return null;
+      }
+    }
+    if (!plan || typeof plan !== "object" || !Array.isArray(plan.days) || plan.days.length === 0) {
+      return null;
+    }
+    const day1 = plan.days[0];
+    if (!day1) return null;
+    if (Array.isArray(day1.activities) && day1.activities.length > 0) {
+      return day1.activities[0];
+    }
+    for (const slot of ["morning", "afternoon", "evening"]) {
+      if (day1[slot] && typeof day1[slot] === "object") {
+        return day1[slot];
+      }
+    }
+    return null;
+  }, [trip?.aiPlan]);
+
+  const hasBadges = useMemo(() => {
+    return hasActivityMetadata(previewActivity);
+  }, [previewActivity]);
+
   return (
     <div
       className="group relative rounded-3xl overflow-hidden cursor-pointer"
@@ -420,6 +446,23 @@ const TripCard = memo(function TripCard({ trip, index, onView, onDelete, onShare
             </div>
           )}
         </div>
+        {/* Activity Metadata Preview (renders only when aiPlan has valid metadata; zero layout shift otherwise) */}
+        {hasBadges && (
+          <div
+            className="pt-2 border-t border-black/5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 mb-1">
+              <span className="truncate max-w-[200px] text-gray-800">
+                {previewActivity.title || "Day 1 Highlight"}
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/50">
+                Day 1
+              </span>
+            </div>
+            <ActivityMetadataBadges activity={previewActivity} compact />
+          </div>
+        )}
         {/* Actions row */}
         <div style={{ display:"flex", gap:"6px", flexWrap:"wrap" }}>
           {/* Share */}
@@ -527,6 +570,7 @@ export default function Dashboard() {
 
   // ✅ CALLBACKS: Stabilized to prevent breaking child component memoization
   const handleShare = useCallback((id) => {
+    shareTrip(id).catch(() => {});
     const url = `${window.location.origin}/shared-trip/${id}`;
     navigator.clipboard.writeText(url).then(() => {
       setShowCopied(true);
@@ -627,8 +671,7 @@ export default function Dashboard() {
         {/* ── Header ── */}
         <div className="flex items-center justify-between mb-10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-black text-white"
-              style={{ background:"linear-gradient(135deg,#f59e0b,#ef4444)" }}>✦</div>
+            <TripNowLogo size={40} variant="icon" />
             <div>
               <p className="text-xs font-bold uppercase tracking-widest" style={{ color:"#9ca3af" }}>TripNow</p>
               <p className="text-sm font-bold" style={{ color:"#111827" }}>Dashboard</p>

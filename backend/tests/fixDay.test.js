@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const app = require("../app");
 const env = require("../config/env");
 const Booking = require("../models/Booking");
-const { connect, clearDatabase, closeDatabase } = require("./db");
+const { connect, clearDatabase, closeDatabase, extractToken } = require("./db");
 const { GoogleGenAI } = require("@google/genai");
 const {
   signProposalToken,
@@ -41,7 +41,7 @@ const userB = { name: "Traveler B", email: "travelerB@example.com", password: "P
 
 const signup = async (user) => {
   const res = await request(app).post("/api/auth/signup").send(user);
-  return { token: res.body.data.token, user: res.body.data.user };
+  return { token: extractToken(res), user: res.body.data.user };
 };
 
 const sample3DayPlan = {

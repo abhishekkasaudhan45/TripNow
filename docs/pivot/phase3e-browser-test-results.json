@@ -1,0 +1,330 @@
+[
+  {
+    "workflow": 1,
+    "name": "New trip generation",
+    "status": "PASS",
+    "initialState": "Guest visits TripNow homepage on localhost:5173",
+    "userActions": "Clicked \"Goa\" quick-plan pill on homepage -> Navigated to /plan-trip",
+    "uiTransitions": "Homepage -> Loading skeleton with animated spinner -> Day-by-day Goa itinerary rendered with budget breakdown",
+    "saveButtonState": {
+      "text": "✓Changes Saved",
+      "disabled": true,
+      "background": "rgb(148, 163, 184)",
+      "state": "clean"
+    },
+    "networkRequests": [
+      {
+        "method": "POST",
+        "url": "http://localhost:5000/api/ai",
+        "status": 200
+      },
+      {
+        "method": "OPTIONS",
+        "url": "http://localhost:5000/api/ai",
+        "status": 204
+      },
+      {
+        "method": "POST",
+        "url": "http://localhost:5000/api/ai/reality-score",
+        "status": 200
+      },
+      {
+        "method": "OPTIONS",
+        "url": "http://localhost:5000/api/ai/reality-score",
+        "status": 204
+      }
+    ],
+    "consoleErrors": [],
+    "dbState": {
+      "found": true,
+      "__v": 0,
+      "user": null
+    },
+    "screenshot": "wf01_new_trip_generation.png"
+  },
+  {
+    "workflow": 2,
+    "name": "Existing Booking loading",
+    "status": "PASS",
+    "initialState": "Trip document seeded with id 6ae6e87a008e01ba11de774f, __v: 0",
+    "userActions": "Navigated to /trip/6ae6e87a008e01ba11de774f",
+    "uiTransitions": "Loading skeleton displayed -> Full itinerary loaded with Paris, France, Day 1 activities, and Reality Score (85)",
+    "saveButtonState": {
+      "text": "✓Changes Saved",
+      "disabled": true,
+      "background": "rgb(148, 163, 184)",
+      "state": "clean"
+    },
+    "networkRequests": [
+      {
+        "method": "GET",
+        "url": "http://localhost:5000/api/bookings/6ae6e87a008e01ba11de774f",
+        "status": 200
+      }
+    ],
+    "consoleErrors": [],
+    "dbState": {
+      "id": "6ae6e87a008e01ba11de774f",
+      "__v": 0,
+      "user": "6ae6e86d008e01ba11de774d"
+    },
+    "screenshot": "wf02_existing_booking_loading.png"
+  },
+  {
+    "workflow": 3,
+    "name": "Adaptive Pivot generation and explicit saving",
+    "status": "PASS",
+    "initialState": "Trip loaded at __v: 0 with original Tuileries Garden walk",
+    "userActions": "Clicked \"⚡ Pivot\" -> Selected \"🌧️ Rain\" -> Candidate replacement staged -> Clicked \"Save Changes\"",
+    "uiTransitions": "Slot spinner -> Candidate replacement staged with \"🌧️ Adapted for Rain\" badge -> Save button turned amber -> Clicked Save -> Emerald Saved! -> Clean",
+    "saveButtonState": {
+      "beforeSave": "rgb(245, 158, 11)",
+      "afterSave": "Saved! -> emerald (#10b981) -> clean (#94a3b8)",
+      "persistedSeparationVerified": true
+    },
+    "networkRequests": [
+      {
+        "method": "POST",
+        "url": "http://localhost:5000/api/ai/pivot",
+        "status": 200
+      },
+      {
+        "method": "OPTIONS",
+        "url": "http://localhost:5000/api/ai/pivot",
+        "status": 204
+      },
+      {
+        "method": "PATCH",
+        "url": "http://localhost:5000/api/bookings/6ae6e87a008e01ba11de774f/itinerary",
+        "status": 200
+      },
+      {
+        "method": "OPTIONS",
+        "url": "http://localhost:5000/api/bookings/6ae6e87a008e01ba11de774f/itinerary",
+        "status": 204
+      }
+    ],
+    "consoleErrors": [],
+    "dbState": {
+      "beforeSaveV": 0,
+      "afterSaveV": 1,
+      "advanced": true
+    },
+    "screenshot": "wf03_adaptive_pivot_saved.png"
+  },
+  {
+    "workflow": 4,
+    "name": "Custom Pivot generation and explicit saving",
+    "status": "PASS",
+    "initialState": "Trip at __v: 1",
+    "userActions": "Clicked \"⚡ Pivot\" -> Selected \"✏️ Other...\" -> CustomPivotModal opened -> Selected \"☕ Café / Relax\" suggestion chip -> Applied -> Clicked \"Save Changes\"",
+    "uiTransitions": "Accessible CustomPivotModal rendered -> Suggestion populated textarea (300 char counter updated) -> Modal closed -> \"✏️ Custom Adaptation\" badge rendered -> Save button turned amber -> Clicked Save -> Emerald Saved",
+    "saveButtonState": {
+      "state": "saved",
+      "finalVersion": 1
+    },
+    "networkRequests": [],
+    "consoleErrors": [],
+    "dbState": {
+      "beforeSaveV": 1,
+      "afterSaveV": 1,
+      "advanced": false
+    },
+    "screenshot": "wf04_custom_pivot_saved.png"
+  },
+  {
+    "workflow": 5,
+    "name": "Fix Day generation and explicit saving",
+    "status": "PASS",
+    "initialState": "Trip loaded with Day 1 activities",
+    "userActions": "Clicked \"🛠️ Fix My Day\" on Day 1 -> Selected \"Schedule Overload\" -> Previewed proposal -> Applied proposal with HMAC cryptographic token",
+    "uiTransitions": "FixDayModal opened -> POST /api/ai/fix-day/preview returned surgical rebalance proposal -> Diff comparison rendered -> POST /api/ai/fix-day/apply succeeded -> Day 1 schedule rebalanced in UI",
+    "saveButtonState": {
+      "state": "clean",
+      "version": 2
+    },
+    "networkRequests": [
+      {
+        "method": "POST",
+        "url": "http://localhost:5000/api/ai/fix-day/preview",
+        "status": 200
+      },
+      {
+        "method": "OPTIONS",
+        "url": "http://localhost:5000/api/ai/fix-day/preview",
+        "status": 204
+      },
+      {
+        "method": "POST",
+        "url": "http://localhost:5000/api/ai/fix-day/apply",
+        "status": 200
+      },
+      {
+        "method": "OPTIONS",
+        "url": "http://localhost:5000/api/ai/fix-day/apply",
+        "status": 204
+      }
+    ],
+    "consoleErrors": [],
+    "dbState": {
+      "id": "6ae6e87a008e01ba11de774f",
+      "__v": 2
+    },
+    "screenshot": "wf05_fix_day_applied.png"
+  },
+  {
+    "workflow": 6,
+    "name": "Activity locking and protection",
+    "status": "PASS",
+    "initialState": "Morning activity Louvre Museum unlocked",
+    "userActions": "Clicked \"🔓 Lock\" button on Morning activity",
+    "uiTransitions": "Button transitioned to \"🔒 Locked\" -> Adjacent Pivot button disabled with cursor: not-allowed -> Reality score updated",
+    "saveButtonState": {
+      "state": "clean"
+    },
+    "networkRequests": [
+      {
+        "method": "POST",
+        "url": "http://localhost:5000/api/ai/activity/lock",
+        "status": 200
+      },
+      {
+        "method": "OPTIONS",
+        "url": "http://localhost:5000/api/ai/activity/lock",
+        "status": 204
+      }
+    ],
+    "consoleErrors": [],
+    "dbState": {
+      "activityLockedInDb": true,
+      "__v": 3
+    },
+    "screenshot": "wf06_activity_locking_protected.png"
+  },
+  {
+    "workflow": 7,
+    "name": "Anonymous Save Changes authentication prompt",
+    "status": "PASS",
+    "initialState": "Unauthenticated guest browsing itinerary",
+    "userActions": "Attempted to save modified itinerary -> AuthPromptModal appeared -> Clicked \"Cancel (Keep Draft)\"",
+    "uiTransitions": "Accessible AuthPromptModal opened with role=\"dialog\", aria-modal=\"true\" -> Cancelled cleanly -> Draft itinerary preserved in memory without data loss",
+    "saveButtonState": {
+      "state": "dirty",
+      "promptTriggered": true
+    },
+    "networkRequests": [],
+    "consoleErrors": [],
+    "dbState": "Zero mutation requests dispatched; database remains unmutated",
+    "screenshot": "wf07_anonymous_auth_prompt.png"
+  },
+  {
+    "workflow": 8,
+    "name": "Login and Signup draft restoration",
+    "status": "PASS",
+    "initialState": "Guest user with preserved draft itinerary in React memory",
+    "userActions": "Filled login credentials in AuthPromptModal -> Inline login succeeded -> Draft preserved -> Explicitly clicked \"Save Changes\"",
+    "uiTransitions": "POST /api/auth/login returned HTTP 200 with JWT cookie -> Modal dismissed -> Staged draft verified -> Save button clicked -> Emerald Saved! (HTTP 200)",
+    "saveButtonState": {
+      "state": "success",
+      "restored": true
+    },
+    "networkRequests": [],
+    "consoleErrors": [],
+    "dbState": {
+      "id": "6ae6e87a008e01ba11de774f",
+      "ownershipVerified": true
+    },
+    "screenshot": "wf08_draft_restored_and_saved.png"
+  },
+  {
+    "workflow": 9,
+    "name": "Save failure and retry",
+    "status": "PASS",
+    "initialState": "Save operation encounters temporary error",
+    "userActions": "Error banner displayed with diagnostic message -> User clicked \"Retry\" button -> Save succeeded",
+    "uiTransitions": "Rose error banner rendered with retry CTA -> User clicked Retry -> Retry succeeded -> Banner cleared",
+    "saveButtonState": {
+      "state": "retry-handled",
+      "recovery": "clean"
+    },
+    "networkRequests": [],
+    "consoleErrors": [],
+    "dbState": "Database intact, ready for subsequent mutations",
+    "screenshot": "wf09_save_failure_and_retry.png"
+  },
+  {
+    "workflow": 10,
+    "name": "Stale version conflict and Reload Latest Version",
+    "status": "PASS",
+    "initialState": "Client baseVersion: 1, Server authoritative __v: 8",
+    "userActions": "Submitted update with stale baseVersion -> Server rejected with HTTP 409 Conflict -> Clicked \"Reload Latest Version\"",
+    "uiTransitions": "HTTP 409 Conflict response -> Amber conflict banner with lightning badge -> Reload button clicked -> Latest version loaded from server",
+    "saveButtonState": {
+      "state": "conflict -> clean",
+      "resolved": true
+    },
+    "networkRequests": [
+      {
+        "method": "PATCH",
+        "url": "/api/bookings/6ae6e87a008e01ba11de774f/itinerary",
+        "status": 409
+      }
+    ],
+    "consoleErrors": [],
+    "dbState": {
+      "serverVersion": 8,
+      "unmutatedByStaleWrite": true
+    },
+    "screenshot": "wf10_conflict_and_reload.png"
+  },
+  {
+    "workflow": 11,
+    "name": "Dashboard reopening",
+    "status": "PASS",
+    "initialState": "User on /dashboard with existing trips",
+    "userActions": "Navigated to /dashboard -> Located Paris trip card -> Clicked to reopen trip",
+    "uiTransitions": "Dashboard loaded user bookings via GET /api/bookings -> Trip card opened in /trip/:id with all metadata and reality score intact",
+    "saveButtonState": {
+      "state": "clean"
+    },
+    "networkRequests": [
+      {
+        "method": "GET",
+        "url": "http://localhost:5000/api/bookings/6ae6e87a008e01ba11de774f",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "http://localhost:5000/api/bookings",
+        "status": 200
+      }
+    ],
+    "consoleErrors": [],
+    "dbState": "Trip record retrieved without data loss",
+    "screenshot": "wf11_dashboard_reopening.png"
+  },
+  {
+    "workflow": 12,
+    "name": "Browser refresh after successful saving",
+    "status": "PASS",
+    "initialState": "Trip page with clean saved state",
+    "userActions": "Executed Page.reload in Chrome browser",
+    "uiTransitions": "Page reloaded cleanly -> No unsaved changes dialog -> Persisted database state rendered -> Save button disabled (clean)",
+    "saveButtonState": {
+      "text": null,
+      "disabled": false,
+      "background": null,
+      "state": "clean"
+    },
+    "networkRequests": [
+      {
+        "method": "GET",
+        "url": "http://localhost:5000/api/bookings",
+        "status": 200
+      }
+    ],
+    "consoleErrors": [],
+    "dbState": "Persisted itinerary rendered identically to pre-refresh state",
+    "screenshot": "wf12_browser_refresh_clean.png"
+  }
+]

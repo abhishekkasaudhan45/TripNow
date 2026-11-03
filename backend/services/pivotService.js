@@ -1,7 +1,20 @@
 // backend/services/pivotService.js
-const { GoogleGenAI, Type } = require("@google/genai");
+const { Type } = require("@google/genai");
 const Booking = require("../models/Booking");
 const env = require("../config/env");
+const { getGeminiClient, getModelName, FALLBACK_MODEL } = require("./geminiClient");
+const {
+  normalizeItinerary,
+  findActivityInPlan,
+  normalizeActivityType,
+  normalizeDurationMinutes,
+  normalizeTravelMode,
+  normalizeIntensity,
+  ALLOWED_ACTIVITY_TYPES,
+  ALLOWED_TRAVEL_MODES,
+  ALLOWED_INTENSITIES,
+} = require("../utils/itineraryNormalizer");
+const { calculateBudgetIntelligence } = require("./budgetIntelligence");
 
 const PIVOT_CANDIDATE_SCHEMA = {
   type: Type.OBJECT,
@@ -12,11 +25,24 @@ const PIVOT_CANDIDATE_SCHEMA = {
         title: { type: Type.STRING },
         description: { type: Type.STRING },
         category: { type: Type.STRING },
+        activityType: {
+          type: Type.STRING,
+          enum: ALLOWED_ACTIVITY_TYPES,
+        },
         indoorOutdoor: {
           type: Type.STRING,
           enum: ["Indoor", "Outdoor", "Mixed"],
         },
-        estimatedDurationMinutes: { type: Type.INTEGER },
+        durationMinutes: { type: Type.INTEGER },
+        travelMode: {
+          type: Type.STRING,
+          enum: ALLOWED_TRAVEL_MODES,
+        },
+        intensity: {
+          type: Type.STRING,
+          enum: ALLOWED_INTENSITIES,
+        },
+        cost: { type: Type.STRING },
         costEstimate: { type: Type.STRING },
         reason: { type: Type.STRING },
         insiderTip: { type: Type.STRING },
@@ -26,8 +52,8 @@ const PIVOT_CANDIDATE_SCHEMA = {
         "description",
         "category",
         "indoorOutdoor",
-        "estimatedDurationMinutes",
-        "costEstimate",
+        "durationMinutes",
+        "cost",
         "reason",
         "insiderTip",
       ],
@@ -64,8 +90,6 @@ async function loadTripAndAuthorize(tripId, user) {
 
   return trip;
 }
-
-const { normalizeItinerary, findActivityInPlan } = require("../utils/itineraryNormalizer");
 
 /**
  * Safely parse aiPlan and locate the specific day and block context.
@@ -181,7 +205,7 @@ REASON CONSTRAINTS (RAIN):
 REASON CONSTRAINTS (LOW ENERGY):
 - Prefer: Relaxing, seated, low-exertion experiences (spas, gentle scenic viewpoints, tea houses, relaxing boat rides, easy cafes, quiet libraries).
 - Avoid: Strenuous hikes, long walking tours, intensive sports, crowded high-stress sights.
-- STRICT RULE: estimatedDurationMinutes must be relaxing and low physical strain (under 180 minutes).
+- STRICT RULE: durationMinutes must be relaxing and low physical strain (under 180 minutes).
 `;
       break;
     case "budget":
@@ -189,7 +213,7 @@ REASON CONSTRAINTS (LOW ENERGY):
 REASON CONSTRAINTS (BUDGET CONCERN):
 - Prefer: Free or very low-cost experiences (public parks, historic courtyards, free museums, street art walks, affordable local markets).
 - Avoid: High-priced admission venues, expensive guided tours, luxury dining.
-- STRICT RULE: costEstimate must be free or minimal.
+- STRICT RULE: cost must be free or minimal.
 `;
       break;
     case "running_late":
@@ -197,7 +221,7 @@ REASON CONSTRAINTS (BUDGET CONCERN):
 REASON CONSTRAINTS (RUNNING LATE):
 - Prefer: Compact, flexible, quick activities with low transit overhead and no strict entry deadlines.
 - Avoid: Long transfers, rigid booking windows, activities requiring more than 2 hours.
-- STRICT RULE: estimatedDurationMinutes must be 90 minutes or less.
+- STRICT RULE: durationMinutes must be 90 minutes or less.
 `;
       break;
     case "closed":
@@ -234,6 +258,13 @@ Context for Day ${dayNumber}:
 Pivot Reason: ${pivotReason.toUpperCase()}
 ${constraintInstructions}
 
+Activity Metadata Requirements:
+- activityType: Best fit category from [${ALLOWED_ACTIVITY_TYPES.join(", ")}].
+- durationMinutes: Realistic integer duration at venue (15–720).
+- travelMode: Transit mode from previous stop or hotel [${ALLOWED_TRAVEL_MODES.join(", ")}].
+- intensity: Exertion level [${ALLOWED_INTENSITIES.join(", ")}].
+- cost: Estimated expense string.
+
 Respond ONLY with a JSON object adhering strictly to the schema.
 `;
 
@@ -261,8 +292,6 @@ function validateCandidateSemantics(candidate, pivotReason, originalActivity) {
     description,
     category,
     indoorOutdoor,
-    estimatedDurationMinutes,
-    costEstimate,
     reason,
     insiderTip,
   } = candidate;
@@ -279,12 +308,19 @@ function validateCandidateSemantics(candidate, pivotReason, originalActivity) {
   if (!["Indoor", "Outdoor", "Mixed"].includes(indoorOutdoor)) {
     return { valid: false, violation: "indoorOutdoor must be 'Indoor', 'Outdoor', or 'Mixed'" };
   }
-  if (typeof estimatedDurationMinutes !== "number" || estimatedDurationMinutes <= 0) {
-    return { valid: false, violation: "estimatedDurationMinutes must be a positive integer" };
+
+  // Duration: support canonical durationMinutes with fallback to estimatedDurationMinutes
+  const rawDuration = candidate.durationMinutes !== undefined ? candidate.durationMinutes : candidate.estimatedDurationMinutes;
+  if (typeof rawDuration !== "number" || rawDuration <= 0) {
+    return { valid: false, violation: "durationMinutes must be a positive integer" };
   }
-  if (!costEstimate || typeof costEstimate !== "string") {
-    return { valid: false, violation: "Missing costEstimate" };
+
+  // Cost: support canonical cost with fallback to costEstimate
+  const cost = candidate.cost || candidate.costEstimate;
+  if (!cost || typeof cost !== "string") {
+    return { valid: false, violation: "Missing cost" };
   }
+
   if (!reason || typeof reason !== "string") {
     return { valid: false, violation: "Missing reason" };
   }
@@ -303,10 +339,10 @@ function validateCandidateSemantics(candidate, pivotReason, originalActivity) {
   }
 
   if (pivotReason === "running_late") {
-    if (estimatedDurationMinutes > 120) {
+    if (rawDuration > 120) {
       return {
         valid: false,
-        violation: `Duration of ${estimatedDurationMinutes}m is too long for a traveler running late. Must be 90m or less.`,
+        violation: `Duration of ${rawDuration}m is too long for a traveler running late. Must be 90m or less.`,
       };
     }
   }
@@ -327,15 +363,12 @@ function validateCandidateSemantics(candidate, pivotReason, originalActivity) {
  * Call Gemini API with timeout protection and model fallback.
  */
 async function callGemini(prompt, attempt = 1) {
-  if (!env.geminiApiKey) {
+  const ai = getGeminiClient();
+  if (!ai) {
     throw new PivotError("AI service configuration error: API key is missing", 500);
   }
 
-  const ai = new GoogleGenAI({
-    apiKey: env.geminiApiKey,
-  });
-
-  let usedModel = env.geminiModel || "gemini-3.6-flash";
+  let usedModel = getModelName();
   const TIMEOUT_MS = 12000;
 
   const requestPromise = (async () => {
@@ -358,7 +391,7 @@ async function callGemini(prompt, attempt = 1) {
         msg.toLowerCase().includes("no longer available to new users");
 
       if (isNewUserDeprecation) {
-        usedModel = "gemini-3.6-flash";
+        usedModel = FALLBACK_MODEL;
         return await ai.models.generateContent({
           model: usedModel,
           contents: prompt,
@@ -438,9 +471,18 @@ async function callGemini(prompt, attempt = 1) {
 }
 
 /**
- * Primary Pivot orchestration: load, prompt, generate with 1 retry, mutate, and save atomically.
+ * Primary Pivot orchestration: load, prompt, generate with 1 retry, mutate, and stage/save.
  */
-async function executePivot({ tripId, dayNumber, block, activityId, pivotReason, customReason, user }) {
+async function executePivot({
+  tripId,
+  dayNumber,
+  block,
+  activityId,
+  pivotReason,
+  customReason,
+  user,
+  autoPersist = false,
+}) {
   // 1. Load and authorize
   const trip = await loadTripAndAuthorize(tripId, user);
   const currentVersion = trip.__v;
@@ -492,6 +534,22 @@ async function executePivot({ tripId, dayNumber, block, activityId, pivotReason,
     console.log("✅ [Pivot] Candidate passed validation on first attempt.");
   }
 
+  // 5.5. Canonical metadata normalization and backward-compatible synchronization
+  const normDuration = normalizeDurationMinutes(candidate);
+  const rawDuration = candidate.durationMinutes !== undefined ? candidate.durationMinutes : candidate.estimatedDurationMinutes;
+  const canonicalDuration = normDuration.durationMinutes !== null
+    ? normDuration.durationMinutes
+    : (typeof rawDuration === "number" && rawDuration > 0 ? rawDuration : null);
+
+  const costValue = candidate.cost || candidate.costEstimate || "Moderate";
+  candidate.durationMinutes = canonicalDuration;
+  candidate.estimatedDurationMinutes = canonicalDuration; // Backward compatibility
+  candidate.cost = costValue;
+  candidate.costEstimate = costValue; // Backward compatibility
+  candidate.activityType = normalizeActivityType(candidate.activityType);
+  candidate.travelMode = normalizeTravelMode(candidate.travelMode);
+  candidate.intensity = normalizeIntensity(candidate.intensity);
+
   // 6. Surgical Mutation: Mutate ONLY the target block and its structured activity
   const clonedPlan = JSON.parse(JSON.stringify(context.plan));
   const formattedBlock = `${candidate.title} — ${candidate.description}`;
@@ -505,33 +563,72 @@ async function executePivot({ tripId, dayNumber, block, activityId, pivotReason,
       actMatch.title = candidate.title;
       actMatch.description = candidate.description;
       actMatch.category = candidate.category;
-      actMatch.durationMinutes = candidate.estimatedDurationMinutes;
-      actMatch.cost = candidate.costEstimate;
+      actMatch.activityType = candidate.activityType;
+      actMatch.durationMinutes = canonicalDuration;
+      actMatch.durationInferred = false;
+      actMatch.travelMode = candidate.travelMode;
+      actMatch.intensity = candidate.intensity;
+      actMatch.cost = costValue;
       actMatch.indoorOutdoor = candidate.indoorOutdoor;
     }
   }
 
-  // 7. Atomic persistence with Optimistic Concurrency Control (__v)
-  const planToSave = typeof trip.aiPlan === "string" ? JSON.stringify(clonedPlan) : clonedPlan;
+  // 7. Atomic persistence with Optimistic Concurrency Control (__v) (Only if autoPersist=true)
+  if (autoPersist) {
+    const planToSave = typeof trip.aiPlan === "string" ? JSON.stringify(clonedPlan) : clonedPlan;
 
-  const updatedTrip = await Booking.findOneAndUpdate(
-    { _id: tripId, __v: currentVersion },
-    {
-      $set: { aiPlan: planToSave },
-      $inc: { __v: 1 },
-    },
-    { returnDocument: "after" }
-  );
-
-  if (!updatedTrip) {
-    console.warn(`🔒 [Pivot] Optimistic concurrency conflict on trip=${tripId}. Expected __v=${currentVersion}.`);
-    throw new PivotError(
-      "Conflict: Trip was modified concurrently by another action. Please refresh and try again.",
-      409
+    const updatedTrip = await Booking.findOneAndUpdate(
+      { _id: tripId, __v: currentVersion },
+      {
+        $set: { aiPlan: planToSave },
+        $inc: { __v: 1 },
+      },
+      { returnDocument: "after" }
     );
+
+    if (!updatedTrip) {
+      console.warn(`🔒 [Pivot] Optimistic concurrency conflict on trip=${tripId}. Expected __v=${currentVersion}.`);
+      throw new PivotError(
+        "Conflict: Trip was modified concurrently by another action. Please refresh and try again.",
+        409
+      );
+    }
+
+    console.log(`🎉 [Pivot] Successfully persisted surgical pivot on trip=${tripId} D${resolvedDayNumber} ${resolvedBlock}!`);
+  } else {
+    console.log(`⚡ [Pivot] Generated candidate replacement for trip=${tripId} D${resolvedDayNumber} ${resolvedBlock} (staged, not persisted).`);
   }
 
-  console.log(`🎉 [Pivot] Successfully persisted surgical pivot on trip=${tripId} D${resolvedDayNumber} ${resolvedBlock}!`);
+  // Deterministic budget guidance (zero AI calls, purely mathematical)
+  let budgetGuidance = null;
+  try {
+    const rawDays = trip.startDate && trip.endDate && !isNaN(new Date(trip.startDate)) && !isNaN(new Date(trip.endDate))
+      ? Math.max(1, Math.round((new Date(trip.endDate) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24)))
+      : (clonedPlan?.days?.length || 1);
+    const guestCount = trip.guests || trip.travelers || 1;
+    const bResult = calculateBudgetIntelligence({
+      destination: trip.destination,
+      totalBudget: trip.budget,
+      days: rawDays,
+      guests: guestCount,
+      currency: "INR",
+    });
+    if (bResult && bResult.status === "CALCULATED") {
+      budgetGuidance = {
+        destinationTier: bResult.tier,
+        comfortCategory: bResult.category,
+        dailyPerPerson: bResult.perPersonDailyBudget,
+        perPersonDailyBudget: bResult.perPersonDailyBudget,
+        groupDailyBudget: bResult.groupDailyBudget,
+        currency: "INR",
+        qualitativeNote: pivotReason === "budget"
+          ? "Budget-conscious replacement selected. Activity costs are qualitative estimates and not deducted from numeric totals."
+          : "Activity costs are qualitative venue estimates and do not alter your total trip budget.",
+      };
+    }
+  } catch (_err) {
+    // Non-blocking fallback
+  }
 
   return {
     tripId: trip._id.toString(),
@@ -541,6 +638,9 @@ async function executePivot({ tripId, dayNumber, block, activityId, pivotReason,
     pivotReason,
     replacement: candidate,
     formattedBlock,
+    stagedPlan: clonedPlan,
+    persisted: Boolean(autoPersist),
+    budgetGuidance,
   };
 }
 

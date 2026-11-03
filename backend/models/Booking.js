@@ -72,8 +72,26 @@ const bookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+
+    // 🔒 Privacy and Display enhancements
+    coverImage: {
+      type: String,
+      default: null,
+    },
+    realityScore: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    isShared: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   { timestamps: true }
 );
+
+// Compound index for user trip dashboard sorted by creation date (ARCH-04)
+bookingSchema.index({ user: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Booking", bookingSchema);

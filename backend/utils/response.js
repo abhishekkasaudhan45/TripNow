@@ -22,7 +22,7 @@ const sendSuccess = (
 
 const sendError = (
   res,
-  { statusCode = 500, message = "Internal server error", errors, stack } = {}
+  { statusCode = 500, message = "Internal server error", errors, stack, requestId } = {}
 ) => {
   const payload = {
     success: false,
@@ -31,6 +31,10 @@ const sendError = (
 
   if (errors) {
     payload.errors = errors;
+  }
+
+  if (requestId) {
+    payload.requestId = requestId;
   }
 
   if (stack) {

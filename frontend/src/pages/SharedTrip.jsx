@@ -5,6 +5,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getSharedTrip } from "../services/bookingService";
+import ActivityMetadataBadges from "../components/ActivityMetadataBadges";
+import { downloadItineraryPDF } from "../utils/pdf";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function formatDate(d) {
@@ -17,6 +19,14 @@ function formatDate(d) {
 function daysBetween(a, b) {
   if (!a || !b) return 0;
   return Math.max(1, Math.round((new Date(b) - new Date(a)) / 86400000));
+}
+
+function getActivityForSlot(day, period) {
+  if (!day || !Array.isArray(day.activities)) return null;
+  const match = day.activities.find((a) => a?.period === period);
+  if (match) return match;
+  const idx = period === "morning" ? 0 : period === "afternoon" ? 1 : 2;
+  return day.activities[idx] || null;
 }
 
 /**
@@ -391,6 +401,31 @@ export default function SharedTrip() {
                   <div className="st-pill">👥 <b>{guests}</b> guest{guests !== 1 ? "s" : ""}</div>
                   {budget && <div className="st-pill">💰 <b>₹{budget}</b></div>}
                   {aiPlan  && <div className="st-pill">✦ <b>AI Generated</b></div>}
+                  {aiPlan && (
+                    <button
+                      className="st-pill"
+                      style={{
+                        cursor: "pointer",
+                        background: "rgba(245, 158, 11, 0.12)",
+                        color: "#b45309",
+                        border: "1px solid rgba(245, 158, 11, 0.3)",
+                      }}
+                      onClick={() => {
+                        downloadItineraryPDF({
+                          destination: dest,
+                          budget,
+                          startDate: checkin,
+                          endDate: checkout,
+                          tripData: aiPlan,
+                          bookingId: trip?._id,
+                        });
+                      }}
+                      title="Download PDF itinerary"
+                      aria-label="Download PDF itinerary"
+                    >
+                      📄 <b>Download PDF</b>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -433,43 +468,57 @@ export default function SharedTrip() {
 
                         <div className="st-sec">Day-by-day itinerary</div>
                         <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-                          {aiPlan.days?.map((day, i) => (
-                            <div key={i} className={`st-day ${openDays[i] ? "open" : ""}`}>
-                              <div className="st-day-hdr" onClick={() => toggleDay(i)}>
-                                <div className={`st-day-num c${i % 4}`}>D{day.day}</div>
-                                <div className="st-day-ttl">{day.title || `Day ${day.day}`}</div>
-                                <div className={`st-day-chev ${openDays[i] ? "open" : ""}`}>▾</div>
-                              </div>
-                              <div className={`st-day-body ${openDays[i] ? "open" : ""}`}>
-                                <div className="st-slot">
-                                  <div className="st-slot-lbl" style={{ color:"#fbbf24" }}>
-                                    <div className="st-slot-dot" style={{ background:"#f59e0b" }} />Morning
-                                  </div>
-                                  <div className="st-slot-txt">{day.morning}</div>
+                          {aiPlan.days?.map((day, i) => {
+                            const morningAct = getActivityForSlot(day, "morning");
+                            const afternoonAct = getActivityForSlot(day, "afternoon");
+                            const eveningAct = getActivityForSlot(day, "evening");
+                            return (
+                              <div key={i} className={`st-day ${openDays[i] ? "open" : ""}`}>
+                                <div className="st-day-hdr" onClick={() => toggleDay(i)}>
+                                  <div className={`st-day-num c${i % 4}`}>D{day.day}</div>
+                                  <div className="st-day-ttl">{day.title || `Day ${day.day}`}</div>
+                                  <div className={`st-day-chev ${openDays[i] ? "open" : ""}`}>▾</div>
                                 </div>
-                                <div className="st-slot">
-                                  <div className="st-slot-lbl" style={{ color:"#60a5fa" }}>
-                                    <div className="st-slot-dot" style={{ background:"#60a5fa" }} />Afternoon
-                                  </div>
-                                  <div className="st-slot-txt">{day.afternoon}</div>
-                                </div>
-                                <div className="st-slot">
-                                  <div className="st-slot-lbl" style={{ color:"#c084fc" }}>
-                                    <div className="st-slot-dot" style={{ background:"#c084fc" }} />Evening
-                                  </div>
-                                  <div className="st-slot-txt">{day.evening}</div>
-                                  {day.food?.length > 0 && (
-                                    <div style={{ marginTop:"10px", padding:"8px 10px", background:"rgba(245,158,11,0.07)", borderRadius:"6px", border:"1px solid rgba(245,158,11,0.14)" }}>
-                                      <b style={{ fontSize:"10px", color:"#fbbf24", textTransform:"uppercase", letterSpacing:"0.05em" }}>🍽️ Eats:</b>
-                                      {day.food.map((f, fi) => (
-                                        <div key={fi} style={{ fontSize:"12px", color:"#64748b", marginTop:"4px" }}>• {f}</div>
-                                      ))}
+                                <div className={`st-day-body ${openDays[i] ? "open" : ""}`}>
+                                  <div className="st-slot">
+                                    <div className="st-slot-lbl" style={{ color:"#fbbf24" }}>
+                                      <div className="st-slot-dot" style={{ background:"#f59e0b" }} />Morning
                                     </div>
-                                  )}
+                                    <div className="st-slot-txt">{day.morning || morningAct?.title}</div>
+                                    {morningAct && (
+                                      <ActivityMetadataBadges activity={morningAct} />
+                                    )}
+                                  </div>
+                                  <div className="st-slot">
+                                    <div className="st-slot-lbl" style={{ color:"#60a5fa" }}>
+                                      <div className="st-slot-dot" style={{ background:"#60a5fa" }} />Afternoon
+                                    </div>
+                                    <div className="st-slot-txt">{day.afternoon || afternoonAct?.title}</div>
+                                    {afternoonAct && (
+                                      <ActivityMetadataBadges activity={afternoonAct} />
+                                    )}
+                                  </div>
+                                  <div className="st-slot">
+                                    <div className="st-slot-lbl" style={{ color:"#c084fc" }}>
+                                      <div className="st-slot-dot" style={{ background:"#c084fc" }} />Evening
+                                    </div>
+                                    <div className="st-slot-txt">{day.evening || eveningAct?.title}</div>
+                                    {eveningAct && (
+                                      <ActivityMetadataBadges activity={eveningAct} />
+                                    )}
+                                    {day.food?.length > 0 && (
+                                      <div style={{ marginTop:"10px", padding:"8px 10px", background:"rgba(245,158,11,0.07)", borderRadius:"6px", border:"1px solid rgba(245,158,11,0.14)" }}>
+                                        <b style={{ fontSize:"10px", color:"#fbbf24", textTransform:"uppercase", letterSpacing:"0.05em" }}>🍽️ Eats:</b>
+                                        {day.food.map((f, fi) => (
+                                          <div key={fi} style={{ fontSize:"12px", color:"#64748b", marginTop:"4px" }}>• {f}</div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </>
                     )}

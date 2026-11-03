@@ -1,9 +1,11 @@
 import React, { Suspense, lazy, useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
+import { getCsrfToken } from "./lib/api";
 
 import MainLayout from "./layouts/MainLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { PageSkeleton } from "./components/Skeletons";
+import CookieConsent from "./components/privacy/CookieConsent";
 
 const Home       = lazy(() => import("./pages/Home"));
 const Booking    = lazy(() => import("./pages/Booking"));
@@ -17,6 +19,7 @@ const VerifyEmail    = lazy(() => import("./pages/VerifyEmail"));
 const Dashboard  = lazy(() => import("./pages/Dashboard"));
 const SharedTrip = lazy(() => import("./pages/SharedTrip"));
 const Privacy    = lazy(() => import("./pages/Privacy"));
+const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
 const Terms      = lazy(() => import("./pages/Terms"));
 const NotFound   = lazy(() => import("./pages/NotFound"));
 
@@ -27,6 +30,9 @@ function App() {
   const [warming, setWarming] = useState(false);
 
   useEffect(() => {
+    // Initial CSRF bootstrap & server pre-warming
+    getCsrfToken().catch(() => {});
+
     const url = import.meta.env.VITE_API_URL;
     if (!url) return;
 
@@ -94,6 +100,8 @@ function App() {
           <Route path="/plan-trip" element={<PlanTrip />} />
           <Route path="/trip/:id"  element={<PlanTrip />} />
           <Route path="/privacy"   element={<Privacy />} />
+          <Route path="/cookies"   element={<CookiePolicy />} />
+          <Route path="/cookie-policy" element={<CookiePolicy />} />
           <Route path="/terms"     element={<Terms />} />
 
           <Route path="/dashboard" element={
@@ -108,6 +116,7 @@ function App() {
         </Route>
       </Routes>
       </Suspense>
+      <CookieConsent />
     </>
   );
 }

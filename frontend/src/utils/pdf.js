@@ -14,6 +14,50 @@ const rgb = (hex) => {
   return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
 };
 
+function formatPdfDuration(minutes, inferred) {
+  if (typeof minutes !== "number" || isNaN(minutes) || minutes < 15 || minutes > 720) {
+    return null;
+  }
+  const m = Math.round(minutes);
+  const hours = Math.floor(m / 60);
+  const remaining = m % 60;
+  let text = "";
+  if (hours === 0) text = `${remaining}m`;
+  else if (remaining === 0) text = `${hours}h`;
+  else text = `${hours}h ${remaining}m`;
+  return inferred ? `~${text} (est.)` : text;
+}
+
+const PDF_ACTIVITY_TYPE_LABELS = {
+  sightseeing: "Sightseeing",
+  culture: "Culture",
+  adventure: "Adventure",
+  nature: "Nature",
+  food: "Food & Dining",
+  relaxation: "Relaxation",
+  shopping: "Shopping",
+  nightlife: "Nightlife",
+  transport: "Transit",
+  accommodation: "Accommodation",
+  other: "Activity",
+};
+
+const PDF_TRAVEL_MODE_LABELS = {
+  walking: "Walk",
+  public_transport: "Transit",
+  driving: "Drive",
+  taxi: "Taxi",
+  cycling: "Cycle",
+  ferry: "Ferry",
+  flight: "Flight",
+};
+
+const PDF_INTENSITY_LABELS = {
+  low: "Low exertion",
+  moderate: "Moderate exertion",
+  high: "High exertion",
+};
+
 export async function downloadItineraryPDF({ destination, budget, startDate, endDate, tripData, bookingId }) {
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -144,32 +188,115 @@ export async function downloadItineraryPDF({ destination, budget, startDate, end
   if (plan?.days?.length) {
     sectionHead("Day-by-Day Itinerary", "#D97706");
     for (const day of plan.days) {
-      const mLines = doc.splitTextToSize(safeString(day.morning), CW - 24);
-      const aLines = doc.splitTextToSize(safeString(day.afternoon), CW - 24);
-      const eLines = doc.splitTextToSize(safeString(day.evening), CW - 24);
-      const cardH = 10 + (mLines.length + aLines.length + eLines.length) * 4.2;
-      needSpace(cardH + 4);
+      const hasStructuredActivities = Array.isArray(day.activities) && day.activities.length > 0;
 
-      fill("#FFFFFF"); stroke("#E5E7EB"); lw(0.3);
-      doc.roundedRect(ML, y, CW, cardH, 2, 2, "FD");
+      if (hasStructuredActivities) {
+        // Structured Activities Rendering
+        needSpace(12);
+        fill("#F3F4F6"); stroke("#E5E7EB"); lw(0.3);
+        doc.roundedRect(ML, y, CW, 7, 1.5, 1.5, "FD");
+        color("#111827"); doc.setFont("helvetica", "bold"); doc.setFontSize(9.5);
+        doc.text(`Day ${day.day} — ${day.title || `Day ${day.day}`}`, ML + 4, y + 4.8);
+        y += 9;
 
-      color("#111827"); doc.setFont("helvetica","bold"); doc.setFontSize(9);
-      doc.text(`Day ${day.day} — ${day.title || ""}`, ML + 3, y + 5);
-      y += 1.5;
+        for (const act of day.activities) {
+          const periodTag = (act.period || "Activity").toUpperCase();
+          const titleText = act.title || act.name || "Activity";
+          const titleLines = doc.splitTextToSize(titleText, CW - 32);
 
-      const slot = (label, lines, accent, xOff) => {
-        doc.setFontSize(8);
-        color(accent); doc.setFont("helvetica","bold");
-        doc.text(label, xOff, y + 6);
-        doc.setFont("helvetica","normal"); color("#4B5563");
-        doc.text(lines, xOff, y + 9, { maxWidth: CW/3 - 8 });
-      };
+          const typeKey = act.activityType ? String(act.activityType).toLowerCase().trim() : null;
+          const typeLabel = (typeKey && PDF_ACTIVITY_TYPE_LABELS[typeKey]) || act.category || null;
+          const durationText = formatPdfDuration(act.durationMinutes, act.durationInferred);
+          const travelKey = act.travelMode ? String(act.travelMode).toLowerCase().trim() : null;
+          const travelLabel = (travelKey && PDF_TRAVEL_MODE_LABELS[travelKey]) || null;
+          const intensityKey = act.intensity ? String(act.intensity).toLowerCase().trim() : null;
+          const intensityLabel = (intensityKey && PDF_INTENSITY_LABELS[intensityKey]) || null;
+          const costText = act.cost || null;
+          const settingText = act.indoorOutdoor && ["Indoor", "Outdoor", "Mixed"].includes(act.indoorOutdoor) ? act.indoorOutdoor : null;
+          const locationText = act.location || null;
 
-      slot("MORNING", mLines, "#D97706", ML + 4);
-      slot("AFTERNOON", aLines, "#2563EB", ML + CW/3);
-      slot("EVENING", eLines, "#7C3AED", ML + 2*CW/3);
+          const metaParts = [];
+          if (typeLabel) metaParts.push(`Type: ${typeLabel}`);
+          if (durationText) metaParts.push(`Duration: ${durationText}`);
+          if (travelLabel) metaParts.push(`Travel: ${travelLabel}`);
+          if (intensityLabel) metaParts.push(`Intensity: ${intensityLabel}`);
+          if (costText) metaParts.push(`Cost: ${costText}`);
+          if (settingText) metaParts.push(`Setting: ${settingText}`);
+          if (locationText) metaParts.push(`Location: ${locationText}`);
+          const metaLine = metaParts.join("  |  ");
 
-      y += cardH - 1;
+          const metaLines = metaLine ? doc.splitTextToSize(metaLine, CW - 10) : [];
+          const descLines = act.description ? doc.splitTextToSize(String(act.description), CW - 10) : [];
+
+          const actH = 8 + (titleLines.length * 4) + (metaLines.length > 0 ? metaLines.length * 3.6 + 2 : 0) + (descLines.length > 0 ? descLines.length * 3.5 + 2 : 0);
+          needSpace(actH + 4);
+
+          fill("#FFFFFF"); stroke("#E5E7EB"); lw(0.25);
+          doc.roundedRect(ML, y, CW, actH, 1.5, 1.5, "FD");
+
+          const periodAccent = periodTag === "MORNING" ? "#D97706" : periodTag === "AFTERNOON" ? "#2563EB" : periodTag === "EVENING" ? "#7C3AED" : "#4B5563";
+          color(periodAccent); doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+          doc.text(periodTag, ML + 4, y + 4.5);
+
+          color("#111827"); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+          doc.text(titleLines, ML + 26, y + 4.5, { maxWidth: CW - 30 });
+          let curY = y + 4.5 + (titleLines.length * 4);
+
+          if (metaLines.length > 0) {
+            color("#4B5563"); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+            doc.text(metaLines, ML + 4, curY, { maxWidth: CW - 8 });
+            curY += metaLines.length * 3.6 + 1.5;
+          }
+
+          if (descLines.length > 0) {
+            color("#374151"); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+            doc.text(descLines, ML + 4, curY, { maxWidth: CW - 8 });
+            curY += descLines.length * 3.5;
+          }
+
+          y += actH + 3;
+        }
+
+        if (Array.isArray(day.food) && day.food.length > 0) {
+          const foodStr = `Food highlights: ${day.food.join(" • ")}`;
+          const foodLines = doc.splitTextToSize(foodStr, CW - 12);
+          const foodH = 5 + foodLines.length * 3.5;
+          needSpace(foodH + 2);
+          fill("#FEF3C7"); stroke("#FDE68A"); lw(0.2);
+          doc.roundedRect(ML, y, CW, foodH, 1, 1, "FD");
+          color("#92400E"); doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+          doc.text(foodLines, ML + 4, y + 3.8);
+          y += foodH + 3;
+        }
+      } else {
+        // Legacy fallback when structured activities are absent
+        const mLines = doc.splitTextToSize(safeString(day.morning), CW - 24);
+        const aLines = doc.splitTextToSize(safeString(day.afternoon), CW - 24);
+        const eLines = doc.splitTextToSize(safeString(day.evening), CW - 24);
+        const cardH = 10 + (mLines.length + aLines.length + eLines.length) * 4.2;
+        needSpace(cardH + 4);
+
+        fill("#FFFFFF"); stroke("#E5E7EB"); lw(0.3);
+        doc.roundedRect(ML, y, CW, cardH, 2, 2, "FD");
+
+        color("#111827"); doc.setFont("helvetica","bold"); doc.setFontSize(9);
+        doc.text(`Day ${day.day} — ${day.title || ""}`, ML + 3, y + 5);
+        y += 1.5;
+
+        const slot = (label, lines, accent, xOff) => {
+          doc.setFontSize(8);
+          color(accent); doc.setFont("helvetica","bold");
+          doc.text(label, xOff, y + 6);
+          doc.setFont("helvetica","normal"); color("#4B5563");
+          doc.text(lines, xOff, y + 9, { maxWidth: CW/3 - 8 });
+        };
+
+        slot("MORNING", mLines, "#D97706", ML + 4);
+        slot("AFTERNOON", aLines, "#2563EB", ML + CW/3);
+        slot("EVENING", eLines, "#7C3AED", ML + 2*CW/3);
+
+        y += cardH - 1;
+      }
     }
 
     // ── FOOD & STAYS ──

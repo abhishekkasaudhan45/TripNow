@@ -3,8 +3,9 @@ const request = require("supertest");
 const app = require("../app");
 const env = require("../config/env");
 const Booking = require("../models/Booking");
-const { connect, clearDatabase, closeDatabase } = require("./db");
+const { connect, clearDatabase, closeDatabase, extractToken } = require("./db");
 const { GoogleGenAI } = require("@google/genai");
+const { executePivot, PivotError } = require("../services/pivotService");
 
 jest.mock("@google/genai", () => {
   const original = jest.requireActual("@google/genai");
@@ -32,7 +33,7 @@ const userB = { name: "Traveler B", email: "travelerB@example.com", password: "P
 
 const signup = async (user) => {
   const res = await request(app).post("/api/auth/signup").send(user);
-  return { token: res.body.data.token, user: res.body.data.user };
+  return { token: extractToken(res), user: res.body.data.user };
 };
 
 const sample3DayPlan = {
@@ -169,6 +170,20 @@ describe("POST /api/ai/pivot - Input Validation", () => {
       dayNumber: 2,
       block: "afternoon",
       pivotReason: "custom",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.errors?.customReason).toBeDefined();
+  });
+
+  it("rejects custom pivot reason when customReason exceeds 300 characters", async () => {
+    const longReason = "a".repeat(301);
+    const res = await request(app).post("/api/ai/pivot").send({
+      tripId: "507f1f77bcf86cd799439011",
+      dayNumber: 2,
+      block: "afternoon",
+      pivotReason: "custom",
+      customReason: longReason,
     });
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
@@ -422,6 +437,53 @@ describe("POST /api/ai/pivot - Core Pivot Reasons (Success Flows)", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.replacement.title).toBe("Air-Conditioned Indoor Cooking Masterclass");
   });
+
+  it("preserves original itinerary bit-for-bit when custom pivot AI generation fails", async () => {
+    GoogleGenAI.mockImplementation(() => ({
+      models: {
+        generateContent: jest.fn().mockRejectedValue(new Error("AI service temporary failure")),
+      },
+    }));
+
+    const beforeTrip = await Booking.findById(booking._id).lean();
+
+    const res = await request(app).post("/api/ai/pivot").send({
+      tripId: booking._id.toString(),
+      dayNumber: 2,
+      block: "afternoon",
+      pivotReason: "custom",
+      customReason: "Need air conditioning",
+    });
+
+    expect(res.status).toBe(502);
+    expect(res.body.success).toBe(false);
+
+    // Verify DB was NOT mutated
+    const afterTrip = await Booking.findById(booking._id).lean();
+    expect(afterTrip.aiPlan).toEqual(beforeTrip.aiPlan);
+  });
+
+  it("strictly rejects custom pivot on an activity that is locked (HTTP 423)", async () => {
+    // Lock the activity first
+    const { toggleActivityLock } = require("../services/lockService");
+    await toggleActivityLock({
+      tripId: booking._id.toString(),
+      activityId: "d2-afternoon-01",
+      locked: true,
+    });
+
+    const res = await request(app).post("/api/ai/pivot").send({
+      tripId: booking._id.toString(),
+      dayNumber: 2,
+      block: "afternoon",
+      pivotReason: "custom",
+      customReason: "Too hot outside",
+    });
+
+    expect(res.status).toBe(423);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toContain("locked");
+  });
 });
 
 describe("POST /api/ai/pivot - Defensive Semantic Validation & Single Retry", () => {
@@ -505,7 +567,7 @@ describe("POST /api/ai/pivot - Defensive Semantic Validation & Single Retry", ()
 });
 
 describe("POST /api/ai/pivot - Surgical Mutation & Data Integrity", () => {
-  it("modifies ONLY the selected block; leaves all other days and blocks bit-for-bit identical", async () => {
+  it("generates candidate replacement without persisting to database (Phase 3C staging)", async () => {
     const booking = await createTestBooking();
 
     const replacementCandidate = makeMockCandidate({
@@ -529,6 +591,43 @@ describe("POST /api/ai/pivot - Surgical Mutation & Data Integrity", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.replacement.title).toBe("Sunaparanta Centre for the Arts");
+    expect(res.body.data.formattedBlock).toContain("Sunaparanta Centre for the Arts");
+    expect(res.body.data.persisted).toBe(false);
+    expect(res.body.data.stagedPlan.days[1].afternoon).toContain("Sunaparanta Centre for the Arts");
+
+    // Fetch trip from MongoDB: DB MUST REMAIN UNMUTATED until user explicitly saves
+    const unmutated = await Booking.findById(booking._id);
+    const plan = JSON.parse(unmutated.aiPlan);
+    expect(plan.days[1].afternoon).toBe(sample3DayPlan.days[1].afternoon);
+  });
+
+  it("modifies ONLY the selected block in MongoDB when autoPersist=true is passed (backward compatibility)", async () => {
+    const booking = await createTestBooking();
+
+    const replacementCandidate = makeMockCandidate({
+      title: "Sunaparanta Centre for the Arts",
+      description: "Non-profit arts center with covered galleries and European courtyard cafe.",
+    });
+
+    GoogleGenAI.mockImplementation(() => ({
+      models: {
+        generateContent: jest.fn().mockResolvedValue({
+          text: JSON.stringify({ replacement: replacementCandidate }),
+        }),
+      },
+    }));
+
+    const result = await executePivot({
+      tripId: booking._id.toString(),
+      dayNumber: 2,
+      block: "afternoon",
+      pivotReason: "rain",
+      autoPersist: true,
+    });
+
+    expect(result.persisted).toBe(true);
 
     // Fetch updated trip directly from MongoDB
     const persisted = await Booking.findById(booking._id);
@@ -634,7 +733,7 @@ describe("POST /api/ai/pivot - Upstream Error Handling & Concurrency", () => {
     expect(res.body.message).toContain("malformed");
   });
 
-  it("returns 409 Conflict when concurrent stale mutation version occurs", async () => {
+  it("returns 409 Conflict when concurrent stale mutation version occurs during auto-persistence", async () => {
     GoogleGenAI.mockImplementation(() => ({
       models: {
         generateContent: jest.fn().mockImplementation(async () => {
@@ -646,14 +745,14 @@ describe("POST /api/ai/pivot - Upstream Error Handling & Concurrency", () => {
       },
     }));
 
-    const res = await request(app).post("/api/ai/pivot").send({
-      tripId: booking._id.toString(),
-      dayNumber: 2,
-      block: "afternoon",
-      pivotReason: "rain",
-    });
-
-    expect(res.status).toBe(409);
-    expect(res.body.message).toContain("Conflict");
+    await expect(
+      executePivot({
+        tripId: booking._id.toString(),
+        dayNumber: 2,
+        block: "afternoon",
+        pivotReason: "rain",
+        autoPersist: true,
+      })
+    ).rejects.toThrow(PivotError);
   });
 });

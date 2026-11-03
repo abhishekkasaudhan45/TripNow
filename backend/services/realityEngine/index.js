@@ -128,6 +128,7 @@ function evaluateTripReality(tripOrPlan) {
       hasFullCoordinates: allDaysHaveCoords,
       confidence: {
         costCoverageRatio: totalActivityCount > 0 ? Math.round((budgetEval.knownCount / totalActivityCount) * 100) / 100 : 1,
+        durationCoverageRatio: totalActivityCount > 0 ? Math.round(((totalActivityCount - (timeEval.inferredDurationCount || 0)) / totalActivityCount) * 100) / 100 : 1,
         inferredDurationsCount: timeEval.inferredDurationCount || 0,
         hasExactCoordinates: allDaysHaveCoords,
         budgetSource: rawBudget ? "booking" : (rawPlan?.budgetBreakdown?.total ? "plan_estimate" : "unspecified"),

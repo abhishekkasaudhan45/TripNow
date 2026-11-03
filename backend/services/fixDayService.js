@@ -1,11 +1,21 @@
 // backend/services/fixDayService.js
 const crypto = require("crypto");
-const { GoogleGenAI, Type } = require("@google/genai");
+const { Type } = require("@google/genai");
 const Booking = require("../models/Booking");
 const env = require("../config/env");
-const { normalizeItinerary } = require("../utils/itineraryNormalizer");
+const { getGeminiClient, getModelName, FALLBACK_MODEL } = require("./geminiClient");
+const {
+  normalizeItinerary,
+  normalizeActivityType,
+  normalizeTravelMode,
+  normalizeIntensity,
+  ALLOWED_ACTIVITY_TYPES,
+  ALLOWED_TRAVEL_MODES,
+  ALLOWED_INTENSITIES,
+} = require("../utils/itineraryNormalizer");
 const { evaluateTripReality } = require("./realityEngine");
 const { parseCostString } = require("./realityEngine/budgetEngine");
+const { calculateBudgetIntelligence } = require("./budgetIntelligence");
 
 const ALLOWED_CATEGORIES = [
   "Sightseeing",
@@ -35,11 +45,23 @@ const FIX_DAY_CANDIDATE_SCHEMA = {
           type: Type.STRING,
           enum: ALLOWED_CATEGORIES,
         },
+        activityType: {
+          type: Type.STRING,
+          enum: ALLOWED_ACTIVITY_TYPES,
+        },
         indoorOutdoor: {
           type: Type.STRING,
           enum: ["Indoor", "Outdoor", "Mixed"],
         },
         durationMinutes: { type: Type.INTEGER },
+        travelMode: {
+          type: Type.STRING,
+          enum: ALLOWED_TRAVEL_MODES,
+        },
+        intensity: {
+          type: Type.STRING,
+          enum: ALLOWED_INTENSITIES,
+        },
         cost: { type: Type.STRING },
         reason: { type: Type.STRING },
       },
@@ -217,7 +239,9 @@ async function loadTripAndAuthorize(tripId, user) {
 }
 
 /**
- * Deep compare all 10 canonical fields for locked activity immutability.
+ * Deep compare all canonical fields for locked activity immutability,
+ * including Phase 5D metadata fields (activityType, durationMinutes, travelMode, intensity).
+ * Safely handles missing/null historical metadata without false negatives.
  */
 function isLockedActivityUnchanged(orig, candidate) {
   if (!orig || !candidate) return false;
@@ -227,16 +251,24 @@ function isLockedActivityUnchanged(orig, candidate) {
     "title",
     "description",
     "category",
+    "activityType",
     "durationMinutes",
+    "travelMode",
+    "intensity",
     "cost",
     "indoorOutdoor",
-    "locked",
   ];
 
   for (const field of fields) {
-    if (orig[field] !== candidate[field]) {
+    const origVal = orig[field] ?? null;
+    const candVal = candidate[field] ?? null;
+    if (origVal !== candVal) {
       return false;
     }
+  }
+
+  if (Boolean(orig.locked) !== Boolean(candidate.locked)) {
+    return false;
   }
 
   // Check nested location if present
@@ -259,15 +291,12 @@ function isLockedActivityUnchanged(orig, candidate) {
  * Calls Gemini with timeout protection and model fallback.
  */
 async function callGeminiForFixDay(prompt) {
-  if (!env.geminiApiKey) {
+  const ai = getGeminiClient();
+  if (!ai) {
     throw new FixDayError("AI service configuration error: API key is missing", 500, "CONFIG_ERROR");
   }
 
-  const ai = new GoogleGenAI({
-    apiKey: env.geminiApiKey,
-  });
-
-  let usedModel = env.geminiModel || "gemini-3.6-flash";
+  let usedModel = getModelName();
   const TIMEOUT_MS = 12000;
 
   const requestPromise = (async () => {
@@ -290,7 +319,7 @@ async function callGeminiForFixDay(prompt) {
         msg.toLowerCase().includes("no longer available to new users");
 
       if (isNewUserDeprecation) {
-        usedModel = "gemini-3.6-flash";
+        usedModel = FALLBACK_MODEL;
         return await ai.models.generateContent({
           model: usedModel,
           contents: prompt,
@@ -405,6 +434,9 @@ STRICT CONSTRAINTS:
 4. indoorOutdoor must be "Indoor", "Outdoor", or "Mixed".
 5. Do NOT invent new activity IDs.
 6. Provide a concise reason explaining why this adaptation resolves the schedule disruption.
+7. activityType: select canonical type from [${ALLOWED_ACTIVITY_TYPES.join(", ")}].
+8. travelMode: transit mode to reach activity from [${ALLOWED_TRAVEL_MODES.join(", ")}].
+9. intensity: physical exertion required from [${ALLOWED_INTENSITIES.join(", ")}].
 
 Respond ONLY with a JSON object conforming to the schema.
 `;
@@ -488,6 +520,10 @@ function validateCandidate({
     return { valid: false, violation: "Target activity ID missing from cloned day" };
   }
 
+  const normActivityType = normalizeActivityType(candidate.activityType);
+  const normTravelMode = normalizeTravelMode(candidate.travelMode);
+  const normIntensity = normalizeIntensity(candidate.intensity);
+
   clonedDay.activities[actIndex] = {
     ...targetActivity,
     id: targetActivity.id,
@@ -495,8 +531,11 @@ function validateCandidate({
     title,
     description,
     category,
+    activityType: normActivityType,
     indoorOutdoor,
     durationMinutes,
+    travelMode: normTravelMode,
+    intensity: normIntensity,
     cost,
     durationInferred: false,
     locked: false,
@@ -784,8 +823,11 @@ async function previewFixDay({
         title: candidate.title,
         description: candidate.description,
         category: candidate.category,
+        activityType: normalizeActivityType(candidate.activityType),
         indoorOutdoor: candidate.indoorOutdoor,
         durationMinutes: candidate.durationMinutes,
+        travelMode: normalizeTravelMode(candidate.travelMode),
+        intensity: normalizeIntensity(candidate.intensity),
         cost: candidate.cost,
         reason: candidate.reason,
       },
@@ -819,7 +861,14 @@ async function previewFixDay({
           period: act.period,
           action: "COMPLETED_PAST",
           isLocked: Boolean(act.locked),
-          activity: { id: act.id, title: act.title, durationMinutes: act.durationMinutes },
+          activity: {
+            id: act.id,
+            title: act.title,
+            durationMinutes: act.durationMinutes,
+            activityType: act.activityType ?? null,
+            travelMode: act.travelMode ?? null,
+            intensity: act.intensity ?? null,
+          },
         };
       }
       if (actOrder === currOrder) {
@@ -827,7 +876,14 @@ async function previewFixDay({
           period: act.period,
           action: "CURRENT_IN_PROGRESS",
           isLocked: Boolean(act.locked),
-          activity: { id: act.id, title: act.title, durationMinutes: act.durationMinutes },
+          activity: {
+            id: act.id,
+            title: act.title,
+            durationMinutes: act.durationMinutes,
+            activityType: act.activityType ?? null,
+            travelMode: act.travelMode ?? null,
+            intensity: act.intensity ?? null,
+          },
         };
       }
       if (act.id === targetActivity.id) {
@@ -835,14 +891,25 @@ async function previewFixDay({
           period: act.period,
           action: "REPLACED",
           isLocked: false,
-          originalActivity: { id: act.id, title: act.title, durationMinutes: act.durationMinutes },
+          originalActivity: {
+            id: act.id,
+            title: act.title,
+            durationMinutes: act.durationMinutes,
+            activityType: act.activityType ?? null,
+            travelMode: act.travelMode ?? null,
+            intensity: act.intensity ?? null,
+            cost: act.cost ?? act.costEstimate ?? "Moderate",
+          },
           replacementActivity: {
             id: targetActivity.id,
             title: candidate.title,
             description: candidate.description,
             category: candidate.category,
+            activityType: normalizeActivityType(candidate.activityType),
             indoorOutdoor: candidate.indoorOutdoor,
             durationMinutes: candidate.durationMinutes,
+            travelMode: normalizeTravelMode(candidate.travelMode),
+            intensity: normalizeIntensity(candidate.intensity),
             cost: candidate.cost,
             reason: candidate.reason,
           },
@@ -852,7 +919,14 @@ async function previewFixDay({
         period: act.period,
         action: "UNCHANGED",
         isLocked: Boolean(act.locked),
-        activity: { id: act.id, title: act.title, durationMinutes: act.durationMinutes },
+        activity: {
+          id: act.id,
+          title: act.title,
+          durationMinutes: act.durationMinutes,
+          activityType: act.activityType ?? null,
+          travelMode: act.travelMode ?? null,
+          intensity: act.intensity ?? null,
+        },
       };
     }
 
@@ -862,14 +936,25 @@ async function previewFixDay({
         period: act.period,
         action: "REPLACED",
         isLocked: false,
-        originalActivity: { id: act.id, title: act.title, durationMinutes: act.durationMinutes },
+        originalActivity: {
+          id: act.id,
+          title: act.title,
+          durationMinutes: act.durationMinutes,
+          activityType: act.activityType ?? null,
+          travelMode: act.travelMode ?? null,
+          intensity: act.intensity ?? null,
+          cost: act.cost ?? act.costEstimate ?? "Moderate",
+        },
         replacementActivity: {
           id: targetActivity.id,
           title: candidate.title,
           description: candidate.description,
           category: candidate.category,
+          activityType: normalizeActivityType(candidate.activityType),
           indoorOutdoor: candidate.indoorOutdoor,
           durationMinutes: candidate.durationMinutes,
+          travelMode: normalizeTravelMode(candidate.travelMode),
+          intensity: normalizeIntensity(candidate.intensity),
           cost: candidate.cost,
           reason: candidate.reason,
         },
@@ -879,13 +964,49 @@ async function previewFixDay({
       period: act.period,
       action: "UNCHANGED",
       isLocked: Boolean(act.locked),
-      activity: { id: act.id, title: act.title, durationMinutes: act.durationMinutes },
+      activity: {
+        id: act.id,
+        title: act.title,
+        durationMinutes: act.durationMinutes,
+        activityType: act.activityType ?? null,
+        travelMode: act.travelMode ?? null,
+        intensity: act.intensity ?? null,
+      },
     };
   });
 
   const issuesAddressed = currentReport.issues
     .filter((i) => i.id?.includes(`-${dayNumber}`) || i.message?.includes(`Day ${dayNumber}`))
     .map((i) => i.id || i.type);
+
+  // Deterministic budget guidance (zero AI calls, purely mathematical)
+  let budgetGuidance = null;
+  try {
+    const rawDays = trip.startDate && trip.endDate && !isNaN(new Date(trip.startDate)) && !isNaN(new Date(trip.endDate))
+      ? Math.max(1, Math.round((new Date(trip.endDate) - new Date(trip.startDate)) / (1000 * 60 * 60 * 24)))
+      : (plan?.days?.length || 1);
+    const guestCount = trip.guests || trip.travelers || 1;
+    const bResult = calculateBudgetIntelligence({
+      destination: trip.destination,
+      totalBudget: trip.budget,
+      days: rawDays,
+      guests: guestCount,
+      currency: "INR",
+    });
+    if (bResult && bResult.status === "CALCULATED") {
+      budgetGuidance = {
+        destinationTier: bResult.tier,
+        comfortCategory: bResult.category,
+        dailyPerPerson: bResult.perPersonDailyBudget,
+        perPersonDailyBudget: bResult.perPersonDailyBudget,
+        groupDailyBudget: bResult.groupDailyBudget,
+        currency: "INR",
+        qualitativeNote: "Activity costs are qualitative venue estimates and do not alter your total trip budget.",
+      };
+    }
+  } catch (_err) {
+    // Non-blocking fallback
+  }
 
   return {
     tripId: trip._id.toString(),
@@ -895,6 +1016,7 @@ async function previewFixDay({
     proposalId,
     issuedAt,
     expiresAt,
+    budgetGuidance,
     diagnosis: {
       beforeActiveMinutes,
       targetActiveMinutes,
@@ -1020,8 +1142,11 @@ async function applyFixDay({ tripId, dayNumber, proposalToken, user }) {
       title: slot.replacement.title,
       description: slot.replacement.description,
       category: slot.replacement.category,
+      activityType: normalizeActivityType(slot.replacement.activityType),
       indoorOutdoor: slot.replacement.indoorOutdoor,
       durationMinutes: slot.replacement.durationMinutes,
+      travelMode: normalizeTravelMode(slot.replacement.travelMode),
+      intensity: normalizeIntensity(slot.replacement.intensity),
       cost: slot.replacement.cost,
       durationInferred: false,
       locked: false,

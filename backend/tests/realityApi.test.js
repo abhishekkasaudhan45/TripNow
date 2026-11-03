@@ -2,7 +2,7 @@
 const request = require("supertest");
 const app = require("../app");
 const Booking = require("../models/Booking");
-const { connect, clearDatabase, closeDatabase } = require("./db");
+const { connect, clearDatabase, closeDatabase, extractToken } = require("./db");
 const { GoogleGenAI } = require("@google/genai");
 
 jest.mock("@google/genai", () => {
@@ -31,7 +31,7 @@ const userB = { name: "Traveler B", email: "travelerB@example.com", password: "P
 
 const signup = async (user) => {
   const res = await request(app).post("/api/auth/signup").send(user);
-  return { token: res.body.data.token, user: res.body.data.user };
+  return { token: extractToken(res), user: res.body.data.user };
 };
 
 const sample3DayPlan = {

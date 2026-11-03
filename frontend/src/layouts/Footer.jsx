@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { openCookiePreferences } from "../utils/cookieConsent";
+import TripNowLogo from "../components/common/TripNowLogo";
 
 const EMAILJS_SERVICE_ID  = "service_b6ilf8d";
 const EMAILJS_TEMPLATE_ID = "template_x1hv26r";
@@ -203,12 +205,8 @@ function Footer() {
 
           {/* Left: Brand + Socials */}
           <div>
-            <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"14px" }}>
-              <div style={{ width:"42px", height:"42px", borderRadius:"13px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"17px", color:"#fff", fontWeight:900, boxShadow:"0 4px 16px rgba(239,68,68,0.32)", flexShrink:0 }}>✦</div>
-              <div>
-                <p style={{ fontFamily:"'Playfair Display',serif", fontWeight:900, fontSize:"21px", color:"#fff", letterSpacing:"-0.5px", lineHeight:1 }}>TripNow</p>
-                <p style={{ color:"rgba(255,255,255,0.32)", fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.14em" }}>AI Travel Planning</p>
-              </div>
+            <div style={{ marginBottom: "14px" }}>
+              <TripNowLogo size={42} theme="dark" subtitle="AI Travel Planning" />
             </div>
             <p style={{ color:"rgba(255,255,255,0.42)", fontSize:"14px", lineHeight:1.75, maxWidth:"320px", marginBottom:"24px" }}>
               Plan your dream trip in seconds — AI-crafted itineraries, budget breakdowns, food & hotel picks.
@@ -239,10 +237,24 @@ function Footer() {
         <div style={{ height:"1px", background:"rgba(255,255,255,0.08)", marginBottom:"22px" }} />
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"10px" }}>
           <p style={{ color:"rgba(255,255,255,0.26)", fontSize:"13px" }}>© 2026 TripNow · Made by Abhishek Kasaudhan</p>
-          <div style={{ display:"flex", gap:"18px" }}>
-            {[["Home","/"],["Save Trip","/booking"],["Dashboard","/dashboard"],["Privacy","/privacy"],["Terms","/terms"]].map(([l,p]) => (
+          <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"18px" }}>
+            {[["Home","/"],["Save Trip","/booking"],["Dashboard","/dashboard"],["Privacy","/privacy"],["Cookie Policy","/cookies"],["Terms","/terms"]].map(([l,p]) => (
               <a key={l} href={p} className="foot-link">{l}</a>
             ))}
+            <button
+              type="button"
+              onClick={openCookiePreferences}
+              className="foot-link"
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                font: "inherit",
+              }}
+            >
+              Cookie Preferences
+            </button>
           </div>
         </div>
       </div>

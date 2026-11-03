@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import { downloadItineraryPDF } from "../utils/pdf";
+import BudgetIntelligencePanel from "../components/budget/BudgetIntelligencePanel";
 
 export default function Booking() {
   const { state } = useLocation();
@@ -16,7 +17,13 @@ export default function Booking() {
 
   const tripDays = dayCount(startDate, endDate);
 
-  const [form, setForm]         = useState({ fullName:"", email:"", phone:"", travelers:"1", notes:"" });
+  const [form, setForm]         = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    travelers: String(state?.travelers || state?.guests || "1"),
+    notes: "",
+  });
   const [status, setStatus]     = useState("idle");
   const [errMsg, setErrMsg]     = useState("");
   const [bookingId, setBookingId] = useState(null);
@@ -234,6 +241,22 @@ export default function Booking() {
                 <div className="bk-stat"><div className="bk-stat-label">Destination</div><div className="bk-stat-val sky">{destination}</div></div>
               </div>
             </div>
+
+            {destination && budget && (
+              <div>
+                <div className="bk-section-title">Budget Viability & Intelligence</div>
+                <BudgetIntelligencePanel
+                  destination={destination}
+                  totalBudget={budget}
+                  days={tripDays || 1}
+                  guests={Number(form.travelers) || 1}
+                  currency="INR"
+                  compact={false}
+                  showBreakdown={true}
+                  showDisclaimer={true}
+                />
+              </div>
+            )}
 
             <div className="bk-divider" />
 
