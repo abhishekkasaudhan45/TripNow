@@ -2,8 +2,10 @@
 const { GoogleGenAI, Type } = require("@google/genai");
 const env = require("../config/env");
 
-const DEFAULT_MODEL = "gemini-3.6-flash";
-const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+const FALLBACK_MODEL = "gemini-3.1-flash-lite";
+const DEFAULT_TIMEOUT_MS =
+  Number(process.env.AI_TIMEOUT_MS || process.env.GEMINI_TIMEOUT_MS) || 60000;
 
 let cachedClient = null;
 let lastApiKey = null;
@@ -41,10 +43,21 @@ const resetGeminiClient = () => {
 };
 
 /**
- * Resolves the configured model identifier with fallback.
+ * Resolves the primary configured model identifier.
  */
 const getModelName = () => {
-  return env.geminiModel || DEFAULT_MODEL;
+  return env.geminiModel || process.env.GEMINI_MODEL || DEFAULT_MODEL;
+};
+
+/**
+ * Resolves the fallback configured model identifier.
+ */
+const getFallbackModelName = () => {
+  return (
+    env.geminiFallbackModel ||
+    process.env.GEMINI_FALLBACK_MODEL ||
+    FALLBACK_MODEL
+  );
 };
 
 /**
@@ -74,17 +87,29 @@ const classifyGeminiError = (error) => {
   const rawMsg = error?.message || "";
   let errorDetail = rawMsg;
   try {
-    const parsed = typeof rawMsg === "string" && rawMsg.trim().startsWith("{") ? JSON.parse(rawMsg) : null;
+    const parsed =
+      typeof rawMsg === "string" && rawMsg.trim().startsWith("{")
+        ? JSON.parse(rawMsg)
+        : null;
     errorDetail = parsed?.error?.message || rawMsg;
   } catch {
     errorDetail = rawMsg;
   }
-  const lower = errorDetail.toLowerCase();
-  const logDetail = { status, name: error?.name, message: errorDetail };
+
+  // Redact potential API keys or sensitive query parameters from log details
+  const sanitizedMessage =
+    typeof errorDetail === "string"
+      ? errorDetail
+          .replace(/key=[a-zA-Z0-9_\-\.]+/gi, "key=[REDACTED]")
+          .replace(/AIza[a-zA-Z0-9_\-]{35}/g, "[REDACTED_API_KEY]")
+      : String(errorDetail);
+
+  const lower = sanitizedMessage.toLowerCase();
+  const logDetail = { status, name: error?.name, message: sanitizedMessage };
 
   if (
-    errorDetail.includes("API key is missing") ||
-    errorDetail.includes("GEMINI_API_KEY") ||
+    sanitizedMessage.includes("API key is missing") ||
+    sanitizedMessage.includes("GEMINI_API_KEY") ||
     error?.code === "CONFIG_ERROR"
   ) {
     return {
@@ -98,8 +123,10 @@ const classifyGeminiError = (error) => {
   if (
     status === 401 ||
     status === 403 ||
-    (status === 400 && (errorDetail.includes("API key not valid") || errorDetail.includes("API_KEY_INVALID"))) ||
-    errorDetail.includes("API_KEY_INVALID")
+    (status === 400 &&
+      (sanitizedMessage.includes("API key not valid") ||
+        sanitizedMessage.includes("API_KEY_INVALID"))) ||
+    sanitizedMessage.includes("API_KEY_INVALID")
   ) {
     return {
       bucket: "auth",
@@ -109,12 +136,44 @@ const classifyGeminiError = (error) => {
     };
   }
 
+  // 🛡️ Candidate Safety & Recitation Blocks (HTTP 422)
+  if (
+    error?.finishReason === "SAFETY" ||
+    error?.finishReason === "RECITATION" ||
+    lower.includes("safety") ||
+    lower.includes("finish_reason is safety") ||
+    lower.includes("finish_reason is recitation") ||
+    lower.includes("blocked due to safety") ||
+    lower.includes("recitation")
+  ) {
+    return {
+      bucket: "safety_blocked",
+      httpStatus: 422,
+      message: "AI content safety check flagged the itinerary prompt. Please refine your travel query.",
+      logDetail,
+    };
+  }
+
+  // 📋 Client Validation / Bad Arguments (HTTP 400)
+  if (
+    status === 400 ||
+    sanitizedMessage.includes("INVALID_ARGUMENT") ||
+    lower.includes("bad request")
+  ) {
+    return {
+      bucket: "invalid_argument",
+      httpStatus: 400,
+      message: "Invalid travel request parameters provided to AI service.",
+      logDetail,
+    };
+  }
+
   if (
     status === 404 ||
-    errorDetail.includes("models/") ||
-    errorDetail.includes("not found") ||
-    errorDetail.includes("is not supported") ||
-    errorDetail.includes("NOT_FOUND")
+    sanitizedMessage.includes("models/") ||
+    sanitizedMessage.includes("not found") ||
+    sanitizedMessage.includes("is not supported") ||
+    sanitizedMessage.includes("NOT_FOUND")
   ) {
     return {
       bucket: "model_unavailable",
@@ -126,9 +185,9 @@ const classifyGeminiError = (error) => {
 
   if (
     status === 429 ||
-    errorDetail.includes("RESOURCE_EXHAUSTED") ||
-    errorDetail.includes("Quota exceeded") ||
-    errorDetail.includes("rate limit")
+    sanitizedMessage.includes("RESOURCE_EXHAUSTED") ||
+    sanitizedMessage.includes("Quota exceeded") ||
+    sanitizedMessage.includes("rate limit")
   ) {
     return {
       bucket: "rate_limited",
@@ -160,8 +219,8 @@ const classifyGeminiError = (error) => {
   if (
     status === 500 ||
     status === 503 ||
-    errorDetail.includes("UNAVAILABLE") ||
-    errorDetail.includes("INTERNAL") ||
+    sanitizedMessage.includes("UNAVAILABLE") ||
+    sanitizedMessage.includes("INTERNAL") ||
     lower.includes("overloaded") ||
     lower.includes("internal error")
   ) {
@@ -189,7 +248,7 @@ const generateContentWithFallback = async ({
   model,
   contents,
   config,
-  timeoutMs = 25000,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
   logger = console,
 }) => {
   if (!client) {
@@ -199,6 +258,7 @@ const generateContentWithFallback = async ({
   }
 
   let usedModel = model || getModelName();
+  const fallbackModel = getFallbackModelName();
 
   const requestPromise = (async () => {
     try {
@@ -213,9 +273,9 @@ const generateContentWithFallback = async ({
         primaryErr.status === 404 &&
         msg.toLowerCase().includes("no longer available to new users");
 
-      if (isNewUserDeprecation && usedModel !== FALLBACK_MODEL) {
+      if (isNewUserDeprecation && usedModel !== fallbackModel) {
         const originalModel = usedModel;
-        usedModel = FALLBACK_MODEL;
+        usedModel = fallbackModel;
         logger.warn(
           `⚠️ Model '${originalModel}' is no longer available to new users. Falling back to Google AI Studio recommended '${usedModel}'...`
         );
@@ -252,9 +312,11 @@ module.exports = {
   Type,
   DEFAULT_MODEL,
   FALLBACK_MODEL,
+  DEFAULT_TIMEOUT_MS,
   getGeminiClient,
   resetGeminiClient,
   getModelName,
+  getFallbackModelName,
   cleanMarkdownFences,
   classifyGeminiError,
   generateContentWithFallback,

@@ -73,15 +73,15 @@ describe("Batch 2C — ARCH-07: Centralized Gemini Client (geminiClient.js)", ()
     }
   });
 
-  it("verifies centralized model configuration (primary: gemini-3.6-flash, fallback: gemini-3.5-flash-lite)", () => {
-    expect(DEFAULT_MODEL).toBe("gemini-3.6-flash");
-    expect(FALLBACK_MODEL).toBe("gemini-3.5-flash-lite");
+  it("verifies centralized model configuration (primary: gemini-3.5-flash-lite, fallback: gemini-3.1-flash-lite)", () => {
+    expect(DEFAULT_MODEL).toBe("gemini-3.5-flash-lite");
+    expect(FALLBACK_MODEL).toBe("gemini-3.1-flash-lite");
 
     env.geminiModel = "gemini-custom-pro";
     expect(getModelName()).toBe("gemini-custom-pro");
 
     env.geminiModel = "";
-    expect(getModelName()).toBe("gemini-3.6-flash");
+    expect(getModelName()).toBe("gemini-3.5-flash-lite");
   });
 
   it("cleans markdown fences cleanly from responses", () => {
@@ -116,13 +116,23 @@ describe("Batch 2C — ARCH-07: Centralized Gemini Client (geminiClient.js)", ()
     expect(upstreamErr.bucket).toBe("upstream_unavailable");
     expect(upstreamErr.httpStatus).toBe(503);
 
+    // Safety blocked (finishReason: "SAFETY" or message containing "safety")
+    const safetyErr = classifyGeminiError({ finishReason: "SAFETY", message: "Candidate was blocked due to SAFETY" });
+    expect(safetyErr.bucket).toBe("safety_blocked");
+    expect(safetyErr.httpStatus).toBe(422);
+
+    // Invalid argument (400 or INVALID_ARGUMENT message)
+    const argErr = classifyGeminiError({ status: 400, message: "INVALID_ARGUMENT: Schema mismatch" });
+    expect(argErr.bucket).toBe("invalid_argument");
+    expect(argErr.httpStatus).toBe(400);
+
     // Unclassified fallback
     const genericErr = classifyGeminiError({ status: 502, message: "Something strange" });
     expect(genericErr.bucket).toBe("unclassified");
     expect(genericErr.httpStatus).toBe(502);
   });
 
-  it("executes primary-to-fallback order (gemini-3.5-flash-lite) on deprecation failure", async () => {
+  it("executes primary-to-fallback order (gemini-3.1-flash-lite) on deprecation failure", async () => {
     const mockGenerateContent = jest
       .fn()
       .mockRejectedValueOnce({
@@ -154,10 +164,10 @@ describe("Batch 2C — ARCH-07: Centralized Gemini Client (geminiClient.js)", ()
     );
     expect(mockGenerateContent).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ model: "gemini-3.5-flash-lite" })
+      expect.objectContaining({ model: "gemini-3.1-flash-lite" })
     );
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Falling back to Google AI Studio recommended 'gemini-3.5-flash-lite'")
+      expect.stringContaining("Falling back to Google AI Studio recommended 'gemini-3.1-flash-lite'")
     );
     expect(result.text).toBe("{\"fallback\": true}");
   });
@@ -242,7 +252,7 @@ describe("Batch 2C — ARCH-07: Centralized Gemini Client (geminiClient.js)", ()
     );
     expect(mockGenerateContent).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ model: "gemini-3.5-flash-lite" })
+      expect.objectContaining({ model: "gemini-3.1-flash-lite" })
     );
   });
 
@@ -318,7 +328,7 @@ describe("Batch 2C — ARCH-06: AI Service Extraction (aiService.js)", () => {
     expect(res3.checkout.getTime()).toBeGreaterThan(res3.checkin.getTime());
   });
 
-  it("validates valid itinerary structures and rejects invalid ones", () => {
+  it("validates valid itinerary structures, auto-repairs optional fields, and rejects fatally invalid ones", () => {
     const valid = {
       destination: "Paris",
       days: [{ day: 1, title: "Day 1", morning: "Louvre", afternoon: "Eiffel", evening: "Seine", food: ["Croissant"] }],
@@ -337,8 +347,17 @@ describe("Batch 2C — ARCH-06: AI Service Extraction (aiService.js)", () => {
     // Empty days
     expect(validateItinerary({ ...valid, days: [] })).toBe(false);
 
-    // Missing budget breakdown
-    expect(validateItinerary({ ...valid, budgetBreakdown: null })).toBe(false);
+    // Auto-repairs missing secondary fields (mustEat, travelTips, whereToStay, budgetBreakdown)
+    const partial = {
+      destination: "Kyoto",
+      days: [{ day: 1, title: "Day 1", morning: "Temple", afternoon: "Park", evening: "Walk", food: ["Tea"] }],
+    };
+    expect(validateItinerary(partial)).toBe(true);
+    expect(Array.isArray(partial.mustEat)).toBe(true);
+    expect(partial.mustEat.length).toBeGreaterThan(0);
+    expect(Array.isArray(partial.travelTips)).toBe(true);
+    expect(typeof partial.whereToStay).toBe("object");
+    expect(typeof partial.budgetBreakdown).toBe("object");
 
     // Not an object
     expect(validateItinerary(null)).toBe(false);

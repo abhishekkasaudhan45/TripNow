@@ -87,7 +87,9 @@ module.exports = {
   clientUrl: parseAllowedOrigins()[0] || "http://localhost:5173",
   isProduction: (process.env.NODE_ENV || "").trim().toLowerCase() === "production",
   geminiApiKey: process.env.GEMINI_API_KEY,
-  geminiModel: process.env.GEMINI_MODEL || "gemini-3.6-flash",
+  geminiModel: process.env.GEMINI_MODEL || "gemini-3.5-flash-lite",
+  geminiFallbackModel:
+    process.env.GEMINI_FALLBACK_MODEL || "gemini-3.1-flash-lite",
   csrfSecret: validateCsrfSecret(),
 
   fixDayProposalSecret:

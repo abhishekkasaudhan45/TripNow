@@ -11,5 +11,6 @@ process.env.ADMIN_PASSWORD = "AdminPass123";
 process.env.MONGO_URI = "mongodb://127.0.0.1:27017/placeholder";
 process.env.CLIENT_URL = "http://localhost:5173";
 process.env.GEMINI_API_KEY = "test-key";
-process.env.GEMINI_MODEL = "gemini-3.6-flash";
+process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+process.env.GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite";
 process.env.FIX_DAY_PROPOSAL_SECRET = process.env.FIX_DAY_PROPOSAL_SECRET || "test_fix_day_proposal_secret_key_32bytes_minimum_safe";

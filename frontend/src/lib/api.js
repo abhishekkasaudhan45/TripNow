@@ -1,11 +1,15 @@
 import axios from "axios";
 
-const baseURL = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) || "http://localhost:5000";
+const baseURL =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
+  "http://localhost:5000";
 
 const api = axios.create({
   baseURL,
+  // ⏱️ 65 seconds: Prevents client abort while Gemini generates multi-day structured plans
+  timeout: 65000,
   headers: { "Content-Type": "application/json" },
-  // 🔒 Enable cookies for cross-origin / subdomain requests
+  // 🔒 Enable cookies for cross-origin / same-site requests
   withCredentials: true,
 });
 
@@ -30,6 +34,7 @@ export async function getCsrfToken(forceRefresh = false) {
     try {
       const res = await axios.get(`${baseURL}/api/csrf-token`, {
         withCredentials: true,
+        timeout: 10000, // 10s safeguard for CSRF handshake
       });
       inMemoryCsrfToken = res.data?.csrfToken || null;
       return inMemoryCsrfToken;
@@ -108,7 +113,7 @@ api.interceptors.response.use(
           originalRequest.headers["X-CSRF-Token"] = freshToken;
           return api(originalRequest);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     return Promise.reject(error);
