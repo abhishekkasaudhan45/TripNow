@@ -146,24 +146,24 @@ const validateItinerary = (data, fallbackDestination) => {
     return false;
   }
 
-  // Gracefully auto-fill missing or empty secondary fields in-place
+  // Gracefully auto-fill missing or empty secondary fields in-place with safe neutral representations
   if (!Array.isArray(data.mustEat) || data.mustEat.length === 0) {
-    data.mustEat = ["Try popular local street food and authentic regional delicacies."];
+    data.mustEat = ["Explore regional specialties and popular local eateries."];
   }
 
   if (!data.budgetBreakdown || typeof data.budgetBreakdown !== "object") {
     data.budgetBreakdown = {
       accommodation: "Standard stays",
       foodPerDay: "Mid-range dining",
-      transport: "Local transit & cabs",
-      activities: "Sightseeing entries",
+      transport: "Local transit & transit options",
+      activities: "Sightseeing and venue entries",
       total: "Estimated total ground spend",
     };
   }
 
   if (!Array.isArray(data.travelTips) || data.travelTips.length === 0) {
     data.travelTips = [
-      "Carry comfortable footwear for sightseeing.",
+      "Check local travel advisories and weather forecasts before departure.",
       "Keep digital and offline copies of reservations.",
     ];
   }
@@ -176,7 +176,8 @@ const validateItinerary = (data, fallbackDestination) => {
   }
 
   if (!data.bestTimeToVisit || typeof data.bestTimeToVisit !== "string") {
-    data.bestTimeToVisit = "October to March (pleasant weather)";
+    data.bestTimeToVisit =
+      "Check local seasonal guides for optimal travel weather.";
   }
 
   return true;

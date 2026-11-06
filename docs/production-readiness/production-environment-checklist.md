@@ -116,7 +116,8 @@ All items are formatted as actionable verification steps.
 
 - [ ] **API Key:** Valid Gemini API key from Google AI Studio configured in `GEMINI_API_KEY`.
 - [ ] **API Key Quota & Billing:** Confirm pay-as-you-go or tier quota is active to prevent unexpected `429 RESOURCE_EXHAUSTED` errors during user spikes.
-- [ ] **Model Selection:** `GEMINI_MODEL=gemini-3.6-flash` (code automatically falls back to `gemini-3.5-flash-lite`).
+- [ ] **Model Selection:** `GEMINI_MODEL=gemini-3.5-flash-lite` (code automatically falls back to `gemini-3.1-flash-lite`).
+- [ ] **Generation Timeout:** `AI_TIMEOUT_MS=60000` (defaults to 60,000ms in code).
 
 ---
 
@@ -136,7 +137,9 @@ All items are formatted as actionable verification steps.
 | `ADMIN_PASSWORD` | **Required** | Backend | **YES** | Bootstrap admin user password. | Render Environment (Secret) |
 | `CLIENT_URL` | **Required** | Backend | No | Canonical allowed CORS origin for the authenticated frontend (`https://tripnow.abhishektech.me`). Used for email verification and password reset links. | Render Environment |
 | `GEMINI_API_KEY` | **Required (AI)** | Backend | **YES** | Google AI Studio API key used by `@google/genai` to generate personalized itineraries. | Render Environment (Secret) |
-| `GEMINI_MODEL` | Optional | Backend | No | Primary Gemini model identifier (defaults to `gemini-3.6-flash`). | Render Environment |
+| `GEMINI_MODEL` | Optional | Backend | No | Primary Gemini model identifier (defaults to `gemini-3.5-flash-lite`). | Render Environment |
+| `GEMINI_FALLBACK_MODEL` | Optional | Backend | No | Fallback Gemini model identifier (defaults to `gemini-3.1-flash-lite`). | Render Environment |
+| `AI_TIMEOUT_MS` | Optional | Backend | No | AI generation timeout in milliseconds (defaults to `60000`). | Render Environment |
 | `GOOGLE_AUTH_ENABLED` | Optional | Backend | No | Feature flag (`true`/`false`) controlling Google OAuth sign-in endpoint activation. | Render Environment |
 | `GOOGLE_CLIENT_ID` | Conditional | Backend | No | Google OAuth 2.0 Client ID (mandatory if `GOOGLE_AUTH_ENABLED=true`). | Render Environment |
 | `CLOUDINARY_*` | Optional | Backend | **YES** | Cloudinary media upload credentials (falls back to in-memory storage if omitted). | Render Environment (Secret) |
