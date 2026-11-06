@@ -7,6 +7,7 @@ const aiRoutes         = require("./aiRoutes");
 const bookingRoutes    = require("./bookingRoutes");
 const budgetRoutes     = require("./budgetRoutes");
 const sharedTripRoutes = require("./SharedTripRoute");
+const feedbackRoutes   = require("./feedbackRoutes");
 const { getCsrfTokenHandler } = require("../middleware/csrf");
 const router = express.Router();
 
@@ -26,5 +27,6 @@ router.use("/budget", budgetRoutes);
 router.use("/bookings/shared", sharedTripRoutes); // ✅ Standard booking share path
 router.use("/shared", sharedTripRoutes);          // 🔒 Alias for /api/shared/:id
 router.use("/bookings", bookingRoutes);          
+router.use("/feedback", feedbackRoutes);          
 
 module.exports = router;

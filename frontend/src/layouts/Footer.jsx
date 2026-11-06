@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { openCookiePreferences } from "../utils/cookieConsent";
 import TripNowLogo from "../components/common/TripNowLogo";
+import api from "../lib/api";
+import { getUser } from "../utils/auth";
+import FeedbackModal from "../components/feedback/FeedbackModal";
 
 const EMAILJS_SERVICE_ID  = "service_b6ilf8d";
 const EMAILJS_TEMPLATE_ID = "template_x1hv26r";
@@ -48,6 +51,17 @@ function FeedbackForm() {
   const [status, setStatus] = useState("idle");
   const [errMsg, setErrMsg] = useState("");
 
+  useEffect(() => {
+    const u = getUser();
+    if (u?.name || u?.email) {
+      setForm((p) => ({
+        ...p,
+        name: p.name || u.name || "",
+        email: p.email || u.email || "",
+      }));
+    }
+  }, []);
+
   async function send(e) {
     e.preventDefault();
     if (!form.rating)         { setErrMsg("Please pick a star rating!"); return; }
@@ -55,41 +69,48 @@ function FeedbackForm() {
     setErrMsg(""); setStatus("sending");
 
     try {
-      await loadEJS();
+      const res = await api.post("/api/feedback", {
+        name: form.name.trim() || undefined,
+        email: form.email.trim() || undefined,
+        rating: form.rating,
+        message: form.message.trim(),
+        category: "Experience",
+      });
 
-      /*
-        ⚠️  YOUR EMAILJS TEMPLATE must use these EXACT variable names:
-        {{from_name}}  {{from_email}}  {{rating_text}}  {{user_message}}
-        
-        In EmailJS dashboard → Email Templates → edit template_x1hv26r:
-        Subject: New TripNow Feedback from {{from_name}}
-        Body:
-          Name:    {{from_name}}
-          Email:   {{from_email}}
-          Rating:  {{rating_text}}
-          Message: {{user_message}}
-      */
-      const templateParams = {
-        from_name:    form.name.trim()  || "Anonymous Traveller",
-        from_email:   form.email.trim() || "Not provided",
-        rating_text:  `${MOODS[form.rating - 1]} ${form.rating}/5`,
-        user_message: form.message.trim(),
-      };
-
-      const result = await window.emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        templateParams
-      );
-
-      if (result.status === 200) {
+      if (res.data?.success) {
         setStatus("sent");
       } else {
-        throw new Error(`EmailJS status: ${result.status}`);
+        throw new Error(res.data?.message || "Failed to submit feedback.");
       }
     } catch (err) {
-      console.error("EmailJS error:", err);
-      setErrMsg(`Send failed: ${err?.text || err?.message || "Unknown error"}`);
+      console.warn("Feedback submission fallback check:", err);
+      // Fallback: If backend is completely unreachable, attempt direct EmailJS as last-ditch effort
+      try {
+        await loadEJS();
+        const templateParams = {
+          from_name:    form.name.trim()  || "Anonymous Traveller",
+          from_email:   form.email.trim() || "Not provided",
+          rating_text:  `${MOODS[form.rating - 1]} ${form.rating}/5`,
+          user_message: form.message.trim(),
+        };
+        const result = await window.emailjs.send(
+          EMAILJS_SERVICE_ID,
+          EMAILJS_TEMPLATE_ID,
+          templateParams
+        );
+        if (result.status === 200) {
+          setStatus("sent");
+          return;
+        }
+      } catch (fallbackErr) {
+        console.warn("EmailJS fallback also failed:", fallbackErr);
+      }
+
+      const serverMsg =
+        err.response?.data?.message ||
+        err.message ||
+        "Unable to send feedback. Please try again.";
+      setErrMsg(serverMsg);
       setStatus("idle");
     }
   }
@@ -186,6 +207,8 @@ function FeedbackForm() {
 }
 
 function Footer() {
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+
   return (
     <footer style={{ fontFamily:"'DM Sans',sans-serif", background:"linear-gradient(160deg,#1a1a2e 0%,#16213e 45%,#0f3460 100%)", borderTop:"1px solid rgba(255,255,255,0.07)", position:"relative", overflow:"hidden" }}>
       <style>{`
@@ -243,6 +266,20 @@ function Footer() {
             ))}
             <button
               type="button"
+              onClick={() => setIsFeedbackOpen(true)}
+              className="foot-link"
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                font: "inherit",
+              }}
+            >
+              Feedback
+            </button>
+            <button
+              type="button"
               onClick={openCookiePreferences}
               className="foot-link"
               style={{
@@ -258,6 +295,10 @@ function Footer() {
           </div>
         </div>
       </div>
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+      />
     </footer>
   );
 }

@@ -89,6 +89,20 @@ const budgetLimiter = rateLimit({
   skip: skipInTest,
 });
 
+// 📝 Dedicated rate limiter for feedback submissions.
+// Allows genuine user submissions while preventing automated spam.
+const feedbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 submissions per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many feedback submissions. Please try again later.",
+  },
+  skip: skipInTest,
+});
+
 module.exports = {
   aiLimiter,
   authLimiter,
@@ -96,4 +110,5 @@ module.exports = {
   sharedTripLimiter,
   globalLimiter,
   budgetLimiter,
+  feedbackLimiter,
 };
