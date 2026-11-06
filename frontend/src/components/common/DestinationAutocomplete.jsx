@@ -30,7 +30,9 @@ export default function DestinationAutocomplete({
   const listboxRef = useRef(null);
   const listboxId = useId();
 
+  const trimmedQuery = typeof value === "string" ? value.trim() : "";
   const suggestions = getMatchingSuggestions(value, 8);
+  const showDropdown = isOpen && trimmedQuery.length > 0 && suggestions.length > 0;
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -48,20 +50,24 @@ export default function DestinationAutocomplete({
 
   // Ensure active option is scrolled into view during keyboard navigation
   useEffect(() => {
-    if (isOpen && activeIndex >= 0 && listboxRef.current) {
+    if (showDropdown && activeIndex >= 0 && listboxRef.current) {
       const activeEl = listboxRef.current.children[activeIndex];
       if (activeEl && typeof activeEl.scrollIntoView === "function") {
         activeEl.scrollIntoView({ block: "nearest" });
       }
     }
-  }, [activeIndex, isOpen]);
+  }, [activeIndex, showDropdown]);
 
   const handleInputChange = (e) => {
     const nextVal = e.target.value;
     if (onChange) {
       onChange(nextVal, false);
     }
-    setIsOpen(true);
+    if (nextVal.trim().length > 0) {
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
     setActiveIndex(-1);
   };
 
@@ -79,6 +85,7 @@ export default function DestinationAutocomplete({
   const handleKeyDown = (e) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      if (trimmedQuery.length === 0) return;
       if (!isOpen) {
         setIsOpen(true);
         setActiveIndex(0);
@@ -87,6 +94,7 @@ export default function DestinationAutocomplete({
       }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      if (trimmedQuery.length === 0) return;
       if (!isOpen) {
         setIsOpen(true);
         setActiveIndex(suggestions.length - 1);
@@ -94,7 +102,7 @@ export default function DestinationAutocomplete({
         setActiveIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
       }
     } else if (e.key === "Enter") {
-      if (isOpen && activeIndex >= 0 && suggestions[activeIndex]) {
+      if (showDropdown && activeIndex >= 0 && suggestions[activeIndex]) {
         e.preventDefault();
         handleSelectOption(suggestions[activeIndex]);
       }
@@ -126,13 +134,24 @@ export default function DestinationAutocomplete({
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={isOpen}
-        aria-controls={isOpen ? listboxId : undefined}
+        aria-controls={showDropdown ? listboxId : undefined}
         aria-activedescendant={activeOptionId}
         autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
         placeholder={placeholder}
         value={value}
         onChange={handleInputChange}
-        onFocus={() => setIsOpen(true)}
+        onFocus={() => {
+          if (trimmedQuery.length > 0) {
+            setIsOpen(true);
+          }
+        }}
+        onClick={() => {
+          if (trimmedQuery.length > 0) {
+            setIsOpen(true);
+          }
+        }}
         onKeyDown={handleKeyDown}
         required={required}
         autoFocus={autoFocus}
@@ -140,29 +159,26 @@ export default function DestinationAutocomplete({
         style={inputStyle}
       />
 
-      {isOpen && suggestions.length > 0 && (
+      {showDropdown && (
         <ul
           ref={listboxRef}
           id={listboxId}
           role="listbox"
           aria-label="Destination suggestions"
+          className="z-50 min-w-[320px] w-full max-w-sm overflow-x-hidden overflow-y-auto max-h-60 rounded-2xl shadow-2xl border border-slate-200/80 bg-white/95 backdrop-blur-md"
           style={{
             position: "absolute",
             top: "calc(100% + 6px)",
             left: 0,
-            right: 0,
-            zIndex: 999,
+            zIndex: 50,
+            minWidth: "320px",
+            maxWidth: "384px",
+            maxHeight: "240px",
+            overflowX: "hidden",
+            overflowY: "auto",
             margin: 0,
             padding: "6px",
             listStyle: "none",
-            background: "rgba(255, 255, 255, 0.98)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            borderRadius: "16px",
-            border: "1px solid rgba(229, 231, 235, 0.9)",
-            boxShadow: "0 16px 40px -10px rgba(0, 0, 0, 0.18), 0 0 1px 1px rgba(0, 0, 0, 0.05)",
-            maxHeight: "320px",
-            overflowY: "auto",
             display: "flex",
             flexDirection: "column",
             gap: "2px",
@@ -200,20 +216,25 @@ export default function DestinationAutocomplete({
                   handleSelectOption(dest);
                 }}
                 onMouseEnter={() => setActiveIndex(index)}
+                className={`flex items-center justify-between gap-3 px-4 py-3 whitespace-nowrap rounded-xl cursor-pointer transition-colors ${
+                  isSelected ? "bg-amber-100/70" : "hover:bg-amber-50/50"
+                }`}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "9px 12px",
-                  borderRadius: "10px",
+                  gap: "12px",
+                  padding: "10px 14px",
+                  borderRadius: "12px",
                   cursor: "pointer",
+                  whiteSpace: "nowrap",
                   background: isSelected ? "rgba(254, 243, 199, 0.7)" : "transparent",
                   transition: "background 0.12s ease",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ fontSize: "16px" }}>{dest.emoji}</span>
-                  <div>
+                <div className="flex items-center gap-2.5 min-w-0" style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                  <span style={{ fontSize: "16px" }} className="shrink-0">{dest.emoji}</span>
+                  <div className="truncate">
                     <span
                       style={{
                         fontSize: "14px",
@@ -238,6 +259,7 @@ export default function DestinationAutocomplete({
                 </div>
 
                 <span
+                  className="px-2.5 py-0.5 text-xs rounded-full font-medium shrink-0"
                   style={{
                     fontSize: "11px",
                     fontWeight: 700,
@@ -247,6 +269,7 @@ export default function DestinationAutocomplete({
                     color: badgeColor,
                     letterSpacing: "0.02em",
                     whiteSpace: "nowrap",
+                    flexShrink: 0,
                   }}
                 >
                   {dest.badge}

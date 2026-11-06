@@ -136,19 +136,20 @@ export default function Signup() {
 
   const inputStyle = {
     width: "100%",
-    padding: "11px 14px",
-    borderRadius: "14px",
+    padding: "7px 12px",
+    borderRadius: "12px",
     border: "1.5px solid rgba(0, 0, 0, 0.09)",
     background: "rgba(249, 250, 251, 0.92)",
-    fontSize: "14px",
+    fontSize: "13px",
     color: "#111827",
     fontFamily: "'DM Sans', sans-serif",
     boxSizing: "border-box",
-    height: "44px",
+    height: "38px",
   };
 
   return (
     <div
+      className="min-h-screen lg:h-screen lg:max-h-screen lg:overflow-hidden flex flex-col md:flex-row"
       style={{
         fontFamily: "'DM Sans', sans-serif",
         minHeight: "100vh",
@@ -176,9 +177,9 @@ export default function Signup() {
 
       {/* ── Right photo & brand panel (Desktop only) ── */}
       <div
-        className="hidden md:flex flex-col justify-between"
+        className="hidden md:flex flex-col justify-between h-full"
         style={{
-          width: "44%",
+          width: "42%",
           position: "relative",
           overflow: "hidden",
           order: 2,
@@ -206,7 +207,7 @@ export default function Signup() {
         />
 
         {/* Top brand header */}
-        <div style={{ position: "relative", padding: "36px 40px", zIndex: 2 }}>
+        <div style={{ position: "relative", padding: "24px 36px", zIndex: 2 }}>
           <Link
             to="/"
             aria-label="TripNow Home"
@@ -221,10 +222,10 @@ export default function Signup() {
           style={{
             position: "relative",
             margin: "0 auto",
-            width: "84%",
+            width: "86%",
             display: "flex",
             flexDirection: "column",
-            gap: "10px",
+            gap: "8px",
             zIndex: 2,
           }}
         >
@@ -239,26 +240,27 @@ export default function Signup() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "12px",
+                gap: "10px",
                 background: "rgba(255, 255, 255, 0.18)",
                 backdropFilter: "blur(14px)",
                 border: "1px solid rgba(255, 255, 255, 0.35)",
-                borderRadius: "14px",
-                padding: "12px 16px",
+                borderRadius: "12px",
+                padding: "8px 12px",
                 boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
               }}
             >
-              <span style={{ fontSize: "20px" }}>{icon}</span>
-              <span style={{ color: "#ffffff", fontSize: "13px", fontWeight: 600 }}>{text}</span>
+              <span style={{ fontSize: "17px" }}>{icon}</span>
+              <span style={{ color: "#ffffff", fontSize: "12px", fontWeight: 600 }}>{text}</span>
             </div>
           ))}
         </div>
 
         {/* Bottom caption */}
         <div
+          className="pb-12 lg:pb-16 mb-4 lg:mb-6"
           style={{
             position: "relative",
-            padding: "44px 40px",
+            padding: "20px 36px 44px",
             background: "linear-gradient(to top, rgba(17, 24, 39, 0.45) 0%, transparent 100%)",
             zIndex: 2,
           }}
@@ -266,8 +268,8 @@ export default function Signup() {
           <p
             style={{
               color: "rgba(255, 255, 255, 0.90)",
-              fontSize: "14px",
-              lineHeight: 1.6,
+              fontSize: "12.5px",
+              lineHeight: 1.5,
               margin: 0,
             }}
           >
@@ -283,7 +285,7 @@ export default function Signup() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "40px 24px",
+          padding: "20px 20px",
           position: "relative",
           order: 1,
           overflow: "hidden",
@@ -319,22 +321,15 @@ export default function Signup() {
 
         {/* Focused Elevated Auth Card */}
         <div
+          className="border border-slate-200/80 shadow-xl rounded-2xl p-5 lg:p-6 bg-white/95 backdrop-blur-sm relative w-full max-w-[420px]"
           style={{
             position: "relative",
             width: "100%",
-            maxWidth: "440px",
-            background: "rgba(255, 255, 255, 0.88)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            padding: "36px 32px",
-            borderRadius: "26px",
-            border: "1px solid rgba(255, 255, 255, 0.95)",
-            boxShadow:
-              "0 16px 48px -12px rgba(0, 0, 0, 0.12), 0 0 1px 1px rgba(255, 255, 255, 0.5)",
+            maxWidth: "420px",
           }}
         >
           {/* Mobile brand header */}
-          <div className="md:hidden" style={{ textAlign: "center", marginBottom: "28px" }}>
+          <div className="md:hidden" style={{ textAlign: "center", marginBottom: "14px" }}>
             <Link
               to="/"
               aria-label="TripNow Home"
@@ -344,21 +339,21 @@ export default function Signup() {
             </Link>
           </div>
 
-          <div style={{ marginBottom: "24px" }}>
+          <div style={{ marginBottom: "14px" }}>
             <h1
               style={{
                 fontFamily: "'Playfair Display', serif",
-                fontSize: "30px",
+                fontSize: "24px",
                 fontWeight: 900,
                 color: "#111827",
                 letterSpacing: "-1px",
                 lineHeight: 1.15,
-                margin: "0 0 8px 0",
+                margin: "0 0 4px 0",
               }}
             >
               Start your journey ✦
             </h1>
-            <p style={{ color: "#6b7280", fontSize: "14px", margin: 0, lineHeight: 1.5 }}>
+            <p style={{ color: "#6b7280", fontSize: "12.5px", margin: 0, lineHeight: 1.45 }}>
               Free account — create your personalized itinerary in seconds.
             </p>
           </div>
@@ -370,14 +365,14 @@ export default function Signup() {
               role="alert"
               aria-live="assertive"
               style={{
-                padding: "11px 14px",
+                padding: "8px 12px",
                 borderRadius: "12px",
                 background: "rgba(254, 242, 242, 0.95)",
                 border: "1px solid rgba(252, 165, 165, 0.6)",
                 color: "#dc2626",
-                fontSize: "13px",
+                fontSize: "12px",
                 fontWeight: 600,
-                marginBottom: "16px",
+                marginBottom: "10px",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
@@ -388,7 +383,7 @@ export default function Signup() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
             {/* Full Name */}
             <div>
               <label
@@ -400,7 +395,7 @@ export default function Signup() {
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
                   display: "block",
-                  marginBottom: "5px",
+                  marginBottom: "3px",
                 }}
               >
                 Full Name
@@ -433,7 +428,7 @@ export default function Signup() {
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
                   display: "block",
-                  marginBottom: "5px",
+                  marginBottom: "3px",
                 }}
               >
                 Email address
@@ -466,7 +461,7 @@ export default function Signup() {
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
                   display: "block",
-                  marginBottom: "5px",
+                  marginBottom: "3px",
                 }}
               >
                 Password
@@ -485,7 +480,7 @@ export default function Signup() {
                   aria-invalid={!!err && form.password.length < 8}
                   aria-describedby={err ? "signup-error-alert" : "signup-password-hints"}
                   onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-                  style={{ ...inputStyle, paddingRight: "44px" }}
+                  style={{ ...inputStyle, paddingRight: "40px" }}
                 />
                 <button
                   type="button"
@@ -495,14 +490,14 @@ export default function Signup() {
                   aria-pressed={showPass}
                   style={{
                     position: "absolute",
-                    right: "10px",
+                    right: "8px",
                     top: "50%",
                     transform: "translateY(-50%)",
                     background: "none",
                     border: "none",
                     borderRadius: "8px",
                     cursor: "pointer",
-                    padding: "6px",
+                    padding: "5px",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -519,9 +514,9 @@ export default function Signup() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr",
-                  gap: "4px 8px",
-                  marginTop: "8px",
-                  fontSize: "11px",
+                  gap: "2px 6px",
+                  marginTop: "5px",
+                  fontSize: "10.5px",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "5px", color: hasMinLength ? "#059669" : "#6b7280", fontWeight: hasMinLength ? 700 : 500 }}>
@@ -545,7 +540,7 @@ export default function Signup() {
 
             {/* Confirm Password */}
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
                 <label
                   htmlFor="signup-confirm"
                   style={{
@@ -562,7 +557,7 @@ export default function Signup() {
                 {form.confirm.length > 0 && (
                   <span
                     style={{
-                      fontSize: "11px",
+                      fontSize: "10.5px",
                       fontWeight: 700,
                       color: hasMatch ? "#059669" : "#dc2626",
                     }}
@@ -585,7 +580,7 @@ export default function Signup() {
                   aria-invalid={!!err && form.password !== form.confirm}
                   aria-describedby={err ? "signup-error-alert" : undefined}
                   onChange={(e) => setForm((p) => ({ ...p, confirm: e.target.value }))}
-                  style={{ ...inputStyle, paddingRight: "44px" }}
+                  style={{ ...inputStyle, paddingRight: "40px" }}
                 />
                 <button
                   type="button"
@@ -595,14 +590,14 @@ export default function Signup() {
                   aria-pressed={showConfirmPass}
                   style={{
                     position: "absolute",
-                    right: "10px",
+                    right: "8px",
                     top: "50%",
                     transform: "translateY(-50%)",
                     background: "none",
                     border: "none",
                     borderRadius: "8px",
                     cursor: "pointer",
-                    padding: "6px",
+                    padding: "5px",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -620,17 +615,17 @@ export default function Signup() {
               disabled={loading}
               className="btn-main"
               style={{
-                height: "46px",
-                borderRadius: "14px",
+                height: "40px",
+                borderRadius: "12px",
                 background: "linear-gradient(135deg, #f59e0b, #ef4444)",
                 color: "#ffffff",
                 border: "none",
                 fontWeight: 800,
-                fontSize: "15px",
+                fontSize: "14px",
                 cursor: loading ? "not-allowed" : "pointer",
                 fontFamily: "'DM Sans', sans-serif",
                 boxShadow: "0 4px 18px rgba(239, 68, 68, 0.35)",
-                marginTop: "4px",
+                marginTop: "2px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -653,10 +648,10 @@ export default function Signup() {
             <p
               style={{
                 textAlign: "center",
-                fontSize: "11px",
+                fontSize: "10.5px",
                 color: "#6b7280",
                 lineHeight: 1.5,
-                margin: "4px 0 0 0",
+                margin: "2px 0 0 0",
               }}
             >
               By signing up you agree to our{" "}
@@ -675,10 +670,10 @@ export default function Signup() {
           <p
             style={{
               textAlign: "center",
-              marginTop: "20px",
-              fontSize: "14px",
+              marginTop: "12px",
+              fontSize: "12.5px",
               color: "#6b7280",
-              margin: "20px 0 0 0",
+              margin: "12px 0 0 0",
             }}
           >
             Already have an account?{" "}

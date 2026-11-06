@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "cd .. && node --test frontend/tests/*.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

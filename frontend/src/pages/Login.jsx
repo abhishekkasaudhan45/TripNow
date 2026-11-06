@@ -113,6 +113,7 @@ export default function Login() {
 
   return (
     <div
+      className="min-h-screen lg:h-screen lg:max-h-screen lg:overflow-hidden flex flex-col md:flex-row"
       style={{
         fontFamily: "'DM Sans', sans-serif",
         minHeight: "100vh",
@@ -140,7 +141,7 @@ export default function Login() {
 
       {/* ── Left photo & brand panel (Desktop only) ── */}
       <div
-        className="hidden md:flex flex-col justify-between"
+        className="hidden md:flex flex-col justify-between h-full"
         style={{
           width: "44%",
           position: "relative",
@@ -169,7 +170,7 @@ export default function Login() {
         />
 
         {/* Top brand header */}
-        <div style={{ position: "relative", padding: "36px 40px", zIndex: 2 }}>
+        <div style={{ position: "relative", padding: "28px 36px", zIndex: 2 }}>
           <Link
             to="/"
             aria-label="TripNow Home"
@@ -181,9 +182,10 @@ export default function Login() {
 
         {/* Bottom inspirational caption */}
         <div
+          className="pb-12 lg:pb-16 mb-4 lg:mb-6"
           style={{
             position: "relative",
-            padding: "44px 40px",
+            padding: "24px 36px 48px",
             background: "linear-gradient(to top, rgba(17, 24, 39, 0.45) 0%, transparent 100%)",
             zIndex: 2,
           }}
@@ -202,7 +204,7 @@ export default function Login() {
               color: "#ffffff",
               textTransform: "uppercase",
               letterSpacing: "0.1em",
-              marginBottom: "16px",
+              marginBottom: "12px",
             }}
           >
             ✦ Next-Gen Travel Engine
@@ -210,11 +212,11 @@ export default function Login() {
           <h2
             style={{
               fontFamily: "'Playfair Display', serif",
-              fontSize: "clamp(26px, 2.6vw, 38px)",
+              fontSize: "clamp(24px, 2.2vw, 34px)",
               fontWeight: 900,
               color: "#ffffff",
               lineHeight: 1.15,
-              marginBottom: "12px",
+              marginBottom: "10px",
               letterSpacing: "-1px",
             }}
           >
@@ -227,7 +229,7 @@ export default function Login() {
           <p
             style={{
               color: "rgba(255, 255, 255, 0.88)",
-              fontSize: "14px",
+              fontSize: "13px",
               margin: 0,
               lineHeight: 1.5,
             }}
@@ -244,7 +246,7 @@ export default function Login() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "40px 24px",
+          padding: "24px 20px",
           position: "relative",
           overflow: "hidden",
         }}
@@ -279,22 +281,15 @@ export default function Login() {
 
         {/* Focused Elevated Auth Card */}
         <div
+          className="border border-slate-200/80 shadow-xl rounded-2xl p-6 lg:p-7 bg-white/95 backdrop-blur-sm relative w-full max-w-[400px]"
           style={{
             position: "relative",
             width: "100%",
-            maxWidth: "420px",
-            background: "rgba(255, 255, 255, 0.88)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            padding: "36px 32px",
-            borderRadius: "26px",
-            border: "1px solid rgba(255, 255, 255, 0.95)",
-            boxShadow:
-              "0 16px 48px -12px rgba(0, 0, 0, 0.12), 0 0 1px 1px rgba(255, 255, 255, 0.5)",
+            maxWidth: "400px",
           }}
         >
           {/* Mobile brand header */}
-          <div className="md:hidden" style={{ textAlign: "center", marginBottom: "28px" }}>
+          <div className="md:hidden" style={{ textAlign: "center", marginBottom: "16px" }}>
             <Link
               to="/"
               aria-label="TripNow Home"
@@ -304,21 +299,21 @@ export default function Login() {
             </Link>
           </div>
 
-          <div style={{ marginBottom: "26px" }}>
+          <div style={{ marginBottom: "18px" }}>
             <h1
               style={{
                 fontFamily: "'Playfair Display', serif",
-                fontSize: "30px",
+                fontSize: "26px",
                 fontWeight: 900,
                 color: "#111827",
                 letterSpacing: "-1px",
                 lineHeight: 1.15,
-                margin: "0 0 8px 0",
+                margin: "0 0 6px 0",
               }}
             >
               Welcome back 👋
             </h1>
-            <p style={{ color: "#6b7280", fontSize: "14px", margin: 0, lineHeight: 1.5 }}>
+            <p style={{ color: "#6b7280", fontSize: "13px", margin: 0, lineHeight: 1.45 }}>
               Sign in to manage your trips, bookings, and custom itineraries.
             </p>
           </div>
@@ -330,14 +325,14 @@ export default function Login() {
               role="alert"
               aria-live="assertive"
               style={{
-                padding: "11px 14px",
+                padding: "8px 12px",
                 borderRadius: "12px",
                 background: "rgba(254, 242, 242, 0.95)",
                 border: "1px solid rgba(252, 165, 165, 0.6)",
                 color: "#dc2626",
-                fontSize: "13px",
+                fontSize: "12.5px",
                 fontWeight: 600,
-                marginBottom: "18px",
+                marginBottom: "12px",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
@@ -348,7 +343,7 @@ export default function Login() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             {/* Email field */}
             <div>
               <label
@@ -360,7 +355,7 @@ export default function Login() {
                   textTransform: "uppercase",
                   letterSpacing: "0.1em",
                   display: "block",
-                  marginBottom: "6px",
+                  marginBottom: "4px",
                 }}
               >
                 Email address
@@ -380,15 +375,15 @@ export default function Login() {
                 onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
                 style={{
                   width: "100%",
-                  padding: "11px 14px",
-                  borderRadius: "14px",
+                  padding: "8px 12px",
+                  borderRadius: "12px",
                   border: "1.5px solid rgba(0, 0, 0, 0.09)",
                   background: "rgba(249, 250, 251, 0.92)",
-                  fontSize: "14px",
+                  fontSize: "13.5px",
                   color: "#111827",
                   fontFamily: "'DM Sans', sans-serif",
                   boxSizing: "border-box",
-                  height: "44px",
+                  height: "40px",
                 }}
               />
             </div>
@@ -400,7 +395,7 @@ export default function Login() {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  marginBottom: "6px",
+                  marginBottom: "4px",
                 }}
               >
                 <label
@@ -421,7 +416,7 @@ export default function Login() {
                   style={{
                     color: "#f59e0b",
                     fontWeight: 700,
-                    fontSize: "12px",
+                    fontSize: "11.5px",
                     textDecoration: "none",
                     fontFamily: "'DM Sans', sans-serif",
                   }}
@@ -445,15 +440,15 @@ export default function Login() {
                   onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
                   style={{
                     width: "100%",
-                    padding: "11px 44px 11px 14px",
-                    borderRadius: "14px",
+                    padding: "8px 40px 8px 12px",
+                    borderRadius: "12px",
                     border: "1.5px solid rgba(0, 0, 0, 0.09)",
                     background: "rgba(249, 250, 251, 0.92)",
-                    fontSize: "14px",
+                    fontSize: "13.5px",
                     color: "#111827",
                     fontFamily: "'DM Sans', sans-serif",
                     boxSizing: "border-box",
-                    height: "44px",
+                    height: "40px",
                   }}
                 />
                 <button
@@ -464,14 +459,14 @@ export default function Login() {
                   aria-pressed={showPass}
                   style={{
                     position: "absolute",
-                    right: "10px",
+                    right: "8px",
                     top: "50%",
                     transform: "translateY(-50%)",
                     background: "none",
                     border: "none",
                     borderRadius: "8px",
                     cursor: "pointer",
-                    padding: "6px",
+                    padding: "5px",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -489,17 +484,17 @@ export default function Login() {
               disabled={loading}
               className="btn-main"
               style={{
-                height: "46px",
-                borderRadius: "14px",
+                height: "42px",
+                borderRadius: "12px",
                 background: "linear-gradient(135deg, #f59e0b, #ef4444)",
                 color: "#ffffff",
                 border: "none",
                 fontWeight: 800,
-                fontSize: "15px",
+                fontSize: "14px",
                 cursor: loading ? "not-allowed" : "pointer",
                 fontFamily: "'DM Sans', sans-serif",
                 boxShadow: "0 4px 18px rgba(239, 68, 68, 0.35)",
-                marginTop: "4px",
+                marginTop: "2px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -523,10 +518,10 @@ export default function Login() {
           <p
             style={{
               textAlign: "center",
-              marginTop: "24px",
-              fontSize: "14px",
+              marginTop: "16px",
+              fontSize: "13px",
               color: "#6b7280",
-              margin: "24px 0 0 0",
+              margin: "16px 0 0 0",
             }}
           >
             Don&apos;t have an account?{" "}

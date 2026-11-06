@@ -423,8 +423,11 @@ export default function Home() {
           />
         </div>
 
-        <div style={{ position: "relative", maxWidth: "1160px", margin: "0 auto", padding: "140px 24px 80px", zIndex: 5 }}>
-          <div className="fade-in" style={{ display: "flex", justifyContent: "center", marginBottom: "22px" }}>
+        <div
+          className="pt-8 md:pt-10 lg:pt-12 pb-12 px-6"
+          style={{ position: "relative", maxWidth: "1160px", margin: "0 auto", zIndex: 5 }}
+        >
+          <div className="fade-in mb-4" style={{ display: "flex", justifyContent: "center" }}>
             <span
               style={{
                 display: "inline-flex",
@@ -446,7 +449,7 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="fade-in" style={{ textAlign: "center", marginBottom: "12px", animationDelay: "0.1s" }}>
+          <div className="fade-in mb-3" style={{ textAlign: "center", animationDelay: "0.1s" }}>
             <h1
               style={{
                 fontFamily: "'Playfair Display', serif",
@@ -473,13 +476,13 @@ export default function Home() {
             </h1>
           </div>
           <p
-            className="fade-in"
+            className="fade-in mb-6"
             style={{
               textAlign: "center",
-              fontSize: "18px",
+              fontSize: "17px",
               color: "#4b5563",
               maxWidth: "500px",
-              margin: "0 auto 44px",
+              margin: "0 auto 24px",
               animationDelay: "0.2s",
               lineHeight: 1.5,
             }}
@@ -488,10 +491,10 @@ export default function Home() {
           </p>
 
           {/* ── COHESIVE RESPONSIVE SEARCH BAR ── */}
-          <div className="fade-in" style={{ maxWidth: "980px", margin: "0 auto", animationDelay: "0.3s" }}>
+          <div className="fade-in" style={{ maxWidth: "1040px", margin: "0 auto", animationDelay: "0.3s" }}>
             <form onSubmit={handleSubmit} noValidate>
               <div
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.5fr_1.05fr_1.05fr_1.1fr_1.1fr_auto] gap-3 items-end"
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.35fr_1.05fr_1.05fr_1.1fr_1.15fr_auto] gap-3 items-end"
                 style={{
                   background: "rgba(255, 255, 255, 0.88)",
                   backdropFilter: "blur(20px)",
@@ -538,7 +541,7 @@ export default function Home() {
                       color: "#111827",
                       fontFamily: "'DM Sans', sans-serif",
                       boxSizing: "border-box",
-                      height: "44px",
+                      height: "48px",
                     }}
                   />
                 </div>
@@ -577,7 +580,7 @@ export default function Home() {
                       color: "#111827",
                       fontFamily: "'DM Sans', sans-serif",
                       boxSizing: "border-box",
-                      height: "44px",
+                      height: "48px",
                     }}
                   />
                 </div>
@@ -616,7 +619,7 @@ export default function Home() {
                       color: "#111827",
                       fontFamily: "'DM Sans', sans-serif",
                       boxSizing: "border-box",
-                      height: "44px",
+                      height: "48px",
                     }}
                   />
                 </div>
@@ -642,7 +645,7 @@ export default function Home() {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      height: "44px",
+                      height: "48px",
                       background: "rgba(249, 250, 251, 0.92)",
                       border: "1.5px solid rgba(0, 0, 0, 0.09)",
                       borderRadius: "14px",
@@ -656,12 +659,12 @@ export default function Home() {
                       onClick={() => handleTravelerChange(-1)}
                       disabled={form.travelers <= 1}
                       style={{
-                        width: "30px",
-                        height: "30px",
+                        width: "34px",
+                        height: "34px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        borderRadius: "8px",
+                        borderRadius: "10px",
                         border: "none",
                         background: form.travelers <= 1 ? "transparent" : "rgba(0, 0, 0, 0.06)",
                         color: form.travelers <= 1 ? "#cbd5e1" : "#374151",
@@ -691,12 +694,12 @@ export default function Home() {
                       onClick={() => handleTravelerChange(1)}
                       disabled={form.travelers >= 20}
                       style={{
-                        width: "30px",
-                        height: "30px",
+                        width: "34px",
+                        height: "34px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        borderRadius: "8px",
+                        borderRadius: "10px",
                         border: "none",
                         background: form.travelers >= 20 ? "transparent" : "rgba(0, 0, 0, 0.06)",
                         color: form.travelers >= 20 ? "#cbd5e1" : "#374151",
@@ -712,7 +715,7 @@ export default function Home() {
                 </div>
 
                 {/* 5. Budget Field */}
-                <div>
+                <div className="min-w-[140px]">
                   <label
                     htmlFor="budget-input"
                     style={{
@@ -747,7 +750,7 @@ export default function Home() {
                       className="inp-field"
                       type="number"
                       min="0"
-                      placeholder="e.g. 25000"
+                      placeholder="e.g. 25,000"
                       value={form.budget}
                       onChange={handleBudgetChange}
                       style={{
@@ -761,7 +764,7 @@ export default function Home() {
                         color: "#111827",
                         fontFamily: "'DM Sans', sans-serif",
                         boxSizing: "border-box",
-                        height: "44px",
+                        height: "48px",
                       }}
                     />
                   </div>
@@ -771,14 +774,14 @@ export default function Home() {
                 <div className="sm:col-span-2 lg:col-span-1">
                   <button
                     type="submit"
-                    className="btn-glow w-full"
+                    className="btn-glow w-full transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
                     style={{
-                      height: "44px",
+                      height: "48px",
                       background: "linear-gradient(135deg, #f59e0b, #ef4444)",
                       color: "#ffffff",
                       border: "none",
                       borderRadius: "14px",
-                      padding: "0 22px",
+                      padding: "0 24px",
                       fontWeight: 800,
                       fontSize: "14px",
                       cursor: "pointer",

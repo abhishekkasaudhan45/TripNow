@@ -385,8 +385,8 @@ describe("TripNow Phase 5E.5 — Itinerary, Adaptive Pivot & Fix Day Budget Inte
           replacement: mockReplacementCandidate({ id: "d2-evening-01", period: "evening" }),
         },
       ],
-      issuedAt: Date.now() - 1000000,
-      expiresAt: Date.now() - 100000, // expired 100 seconds ago
+      issuedAt: Date.now() - 500000,
+      expiresAt: Date.now() - 100000, // expired 100 seconds ago (lifetime 400s < 900s limit)
     });
 
     const res = await request(app).post("/api/ai/fix-day/apply").send({
